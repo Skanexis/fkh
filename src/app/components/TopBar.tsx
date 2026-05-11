@@ -3,6 +3,7 @@ import { ShoppingCart, User, ChevronLeft } from "lucide-react";
 import { useCart } from "../store/cart-context";
 import { motion } from "motion/react";
 import { useAuth } from "../auth/auth-context";
+import { useSiteSettings } from "../site-settings";
 
 interface TopBarProps {
   title?: string;
@@ -14,6 +15,7 @@ export function TopBar({ title, showBack, transparent }: TopBarProps) {
   const navigate = useNavigate();
   const { itemCount } = useCart();
   const { user } = useAuth();
+  const settings = useSiteSettings();
 
   return (
     <div
@@ -35,7 +37,16 @@ export function TopBar({ title, showBack, transparent }: TopBarProps) {
         </button>
       ) : (
         <div className="flex items-center gap-2">
-          <span className="fkh-live-dot" />
+          {settings.logoUrl ? (
+            <img
+              src={settings.logoUrl}
+              alt={settings.brandName}
+              className="rounded-full object-cover"
+              style={{ width: 28, height: 28, border: "1px solid rgba(255,77,109,0.35)" }}
+            />
+          ) : (
+            <span className="fkh-live-dot" />
+          )}
           <span
             className="fkh-brand-word"
             style={{
@@ -46,7 +57,7 @@ export function TopBar({ title, showBack, transparent }: TopBarProps) {
               letterSpacing: 2,
             }}
           >
-            F.K.H
+            {settings.brandName}
           </span>
         </div>
       )}

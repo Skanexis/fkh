@@ -11,6 +11,7 @@ import { Dashboard } from "./pages/admin/Dashboard";
 import { AdminProducts } from "./pages/admin/AdminProducts";
 import { AdminOrders } from "./pages/admin/AdminOrders";
 import { AdminUsers } from "./pages/admin/AdminUsers";
+import { AdminSettings } from "./pages/admin/AdminSettings";
 
 export const router = createBrowserRouter([
   {
@@ -33,6 +34,7 @@ export const router = createBrowserRouter([
       { path: "products", Component: AdminProducts },
       { path: "orders", Component: AdminOrders },
       { path: "users", Component: AdminUsers },
+      { path: "settings", Component: AdminSettings },
     ],
   },
 ]);

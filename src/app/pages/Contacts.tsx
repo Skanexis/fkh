@@ -1,73 +1,43 @@
+import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { Phone, MessageCircle, Mail, MapPin, ExternalLink, Send } from "lucide-react";
+import { Phone, MessageCircle, Mail, MapPin, ExternalLink, Send, Link } from "lucide-react";
 import { TopBar } from "../components/TopBar";
+import { apiRequest } from "../api/client";
+import { ApiContact, ApiSiteSettings } from "../api/types";
 import { useI18n } from "../i18n";
 
-const CONTACTS = [
-  {
-    id: "phone",
-    icon: Phone,
-    labelKey: "contacts.phone",
-    value: "+39 333 000 0000",
-    subKey: "contacts.hours",
-    actionKey: "contacts.call",
-    href: "tel:+393330000000",
-    color: "#22c55e",
-    bg: "rgba(34,197,94,0.1)",
-    border: "rgba(34,197,94,0.2)",
-  },
-  {
-    id: "telegram",
-    icon: Send,
-    label: "Telegram",
-    value: "@thefkh",
-    subKey: "contacts.telegramSub",
-    actionKey: "contacts.openTelegram",
-    href: "https://t.me/thefkh",
-    color: "#3B82F6",
-    bg: "rgba(59,130,246,0.1)",
-    border: "rgba(59,130,246,0.2)",
-  },
-  {
-    id: "whatsapp",
-    icon: MessageCircle,
-    label: "WhatsApp",
-    value: "+39 333 000 0000",
-    subKey: "contacts.whatsappSub",
-    actionKey: "contacts.openWhatsapp",
-    href: "https://wa.me/393330000000",
-    color: "#22c55e",
-    bg: "rgba(34,197,94,0.1)",
-    border: "rgba(34,197,94,0.2)",
-  },
-  {
-    id: "email",
-    icon: Mail,
-    labelKey: "contacts.email",
-    value: "info@thefkh.com",
-    subKey: "contacts.emailSub",
-    actionKey: "contacts.sendEmail",
-    href: "mailto:info@thefkh.com",
-    color: "#FF4D6D",
-    bg: "rgba(255,77,109,0.1)",
-    border: "rgba(255,77,109,0.2)",
-  },
-  {
-    id: "address",
-    icon: MapPin,
-    labelKey: "contacts.address",
-    value: "Via Roma, 1",
-    subKey: "contacts.city",
-    actionKey: "contacts.openMaps",
-    href: "https://maps.google.com",
-    color: "#ef4444",
-    bg: "rgba(239,68,68,0.1)",
-    border: "rgba(239,68,68,0.2)",
-  },
-];
+const TYPE_STYLE = {
+  phone: { icon: Phone, color: "#22c55e", bg: "rgba(34,197,94,0.1)", border: "rgba(34,197,94,0.2)" },
+  telegram: { icon: Send, color: "#3B82F6", bg: "rgba(59,130,246,0.1)", border: "rgba(59,130,246,0.2)" },
+  whatsapp: { icon: MessageCircle, color: "#22c55e", bg: "rgba(34,197,94,0.1)", border: "rgba(34,197,94,0.2)" },
+  email: { icon: Mail, color: "#FF4D6D", bg: "rgba(255,77,109,0.1)", border: "rgba(255,77,109,0.2)" },
+  address: { icon: MapPin, color: "#ef4444", bg: "rgba(239,68,68,0.1)", border: "rgba(239,68,68,0.2)" },
+  custom: { icon: Link, color: "#A78BFA", bg: "rgba(167,139,250,0.1)", border: "rgba(167,139,250,0.2)" },
+};
 
 export function Contacts() {
   const { t } = useI18n();
+  const [contacts, setContacts] = useState<ApiContact[]>([]);
+  const [settings, setSettings] = useState<ApiSiteSettings | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadContacts() {
+      try {
+        const [apiContacts, siteSettings] = await Promise.all([
+          apiRequest<ApiContact[]>("/api/v1/contacts"),
+          apiRequest<ApiSiteSettings>("/api/v1/site-settings"),
+        ]);
+        setContacts(apiContacts);
+        setSettings(siteSettings);
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : t("catalog.error"));
+      }
+    }
+
+    void loadContacts();
+  }, [t]);
 
   return (
     <div
@@ -83,15 +53,15 @@ export function Contacts() {
           className="pt-4 mb-6"
         >
           <h1 style={{ color: "#FFFFFF", fontWeight: 800, fontSize: 26 }}>{t("nav.contacts")}</h1>
-          <p style={{ color: "#A0A0A0", fontSize: 13, marginTop: 4 }}>
-            {t("contacts.intro")}
+          <p style={{ color: error ? "#ef4444" : "#A0A0A0", fontSize: 13, marginTop: 4 }}>
+            {error ? `${t("common.backend")}: ${error}` : t("contacts.intro")}
           </p>
         </motion.div>
 
-        {/* Contact cards */}
         <div className="flex flex-col gap-3">
-          {CONTACTS.map((contact, i) => {
-            const Icon = contact.icon;
+          {contacts.map((contact, i) => {
+            const style = TYPE_STYLE[contact.type] ?? TYPE_STYLE.custom;
+            const Icon = style.icon;
             return (
               <motion.a
                 key={contact.id}
@@ -106,48 +76,44 @@ export function Contacts() {
                 className="block rounded-2xl p-4 no-underline"
                 style={{
                   background: "#1A1A1D",
-                  border: `1px solid ${contact.border}`,
+                  border: `1px solid ${style.border}`,
                   textDecoration: "none",
                 }}
               >
                 <div className="flex items-center gap-4">
-                  {/* Icon */}
                   <div
                     className="rounded-2xl flex items-center justify-center flex-shrink-0"
                     style={{
                       width: 52,
                       height: 52,
-                      background: contact.bg,
-                      border: `1px solid ${contact.border}`,
+                      background: style.bg,
+                      border: `1px solid ${style.border}`,
                     }}
                   >
-                    <Icon size={22} color={contact.color} strokeWidth={1.8} />
+                    <Icon size={22} color={style.color} strokeWidth={1.8} />
                   </div>
 
-                  {/* Content */}
                   <div className="flex-1 min-w-0">
                     <p style={{ color: "#A0A0A0", fontSize: 11, fontWeight: 500, marginBottom: 2 }}>
-                      {"labelKey" in contact ? t(contact.labelKey) : contact.label}
+                      {contact.label}
                     </p>
                     <p style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 15 }}>
                       {contact.value}
                     </p>
-                    <p style={{ color: "#A0A0A0", fontSize: 12, marginTop: 2 }}>{t(contact.subKey)}</p>
                   </div>
 
-                  {/* CTA */}
-                  <div className="flex-shrink-0 flex flex-col items-end gap-2">
+                  <div className="flex-shrink-0">
                     <div
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
                       style={{
-                        background: contact.bg,
-                        border: `1px solid ${contact.border}`,
+                        background: style.bg,
+                        border: `1px solid ${style.border}`,
                       }}
                     >
-                      <span style={{ color: contact.color, fontSize: 11, fontWeight: 600 }}>
-                        {t(contact.actionKey)}
+                      <span style={{ color: style.color, fontSize: 11, fontWeight: 600 }}>
+                        {t("common.link")}
                       </span>
-                      <ExternalLink size={10} color={contact.color} />
+                      <ExternalLink size={10} color={style.color} />
                     </div>
                   </div>
                 </div>
@@ -156,7 +122,6 @@ export function Contacts() {
           })}
         </div>
 
-        {/* Social footer */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -168,7 +133,7 @@ export function Contacts() {
           }}
         >
           <div
-            className="mx-auto mb-3 flex items-center justify-center rounded-full"
+            className="mx-auto mb-3 flex items-center justify-center rounded-full overflow-hidden"
             style={{
               width: 44,
               height: 44,
@@ -176,9 +141,13 @@ export function Contacts() {
               border: "1px solid rgba(255,77,109,0.3)",
             }}
           >
-            <span style={{ color: "#FF4D6D", fontWeight: 900, fontSize: 14 }}>FKH</span>
+            {settings?.logoUrl ? (
+              <img src={settings.logoUrl} alt={settings.brandName} className="w-full h-full object-cover" />
+            ) : (
+              <span style={{ color: "#FF4D6D", fontWeight: 900, fontSize: 14 }}>FKH</span>
+            )}
           </div>
-          <p style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 16 }}>The F.K.H</p>
+          <p style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 16 }}>{settings?.brandName ?? "The F.K.H"}</p>
           <p style={{ color: "#A0A0A0", fontSize: 13, marginTop: 4 }}>
             {t("contacts.footer")}
           </p>

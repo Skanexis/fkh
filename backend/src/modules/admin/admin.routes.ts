@@ -5,9 +5,16 @@ import { requireAdmin } from "../../common/auth.js";
 import { badRequest, notFound } from "../../common/http-error.js";
 import { money, pageMeta } from "../../common/serialize.js";
 import { prisma } from "../../db/prisma.js";
-import { serializeProduct } from "../catalog/catalog.routes.js";
+import { serializeProduct, serializeSiteSettings } from "../catalog/catalog.routes.js";
 import { assertOrderTransition, serializeOrder } from "../orders/orders.routes.js";
 import { serializeAuthUser } from "../auth/auth.service.js";
+
+const db = prisma as typeof prisma & {
+  siteSettings: {
+    upsert: (args: any) => Promise<any>;
+    update: (args: any) => Promise<any>;
+  };
+};
 
 const pagingQuery = z.object({
   search: z.string().optional(),
@@ -58,6 +65,11 @@ const orderQuery = pagingQuery.extend({
   status: z.nativeEnum(OrderStatus).optional(),
   dateFrom: z.coerce.date().optional(),
   dateTo: z.coerce.date().optional(),
+});
+
+const siteSettingsPayload = z.object({
+  brandName: z.string().min(1).max(80).optional(),
+  logoUrl: z.string().url().nullable().optional(),
 });
 
 export async function registerAdminRoutes(app: FastifyInstance) {
@@ -334,6 +346,34 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     const contact = await prisma.contact.update({ where: { id }, data: { isActive: false } });
     await audit(request, admin.id, "contact.disable", "Contact", id, null, contact);
     return { data: contact };
+  });
+
+  app.get("/api/v1/admin/site-settings", async (request) => {
+    await requireAdmin(request);
+    const settings = await db.siteSettings.upsert({
+      where: { id: "site" },
+      update: {},
+      create: { id: "site" },
+    });
+    return { data: serializeSiteSettings(settings) };
+  });
+
+  app.patch("/api/v1/admin/site-settings", async (request) => {
+    const admin = await requireAdmin(request);
+    const body = siteSettingsPayload.safeParse(request.body);
+    if (!body.success) throw badRequest("Invalid site settings payload", body.error.flatten());
+
+    const before = await db.siteSettings.upsert({
+      where: { id: "site" },
+      update: {},
+      create: { id: "site" },
+    });
+    const settings = await db.siteSettings.update({
+      where: { id: "site" },
+      data: body.data,
+    });
+    await audit(request, admin.id, "site_settings.update", "SiteSettings", "site", before, settings);
+    return { data: serializeSiteSettings(settings) };
   });
 }
 

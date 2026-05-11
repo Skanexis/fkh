@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { requireUser } from "../../common/auth.js";
+import { requireActiveUser, requireUser } from "../../common/auth.js";
 import { badRequest, notFound } from "../../common/http-error.js";
 import { prisma } from "../../db/prisma.js";
 import { serializeAuthUser } from "../auth/auth.service.js";
@@ -20,7 +20,7 @@ export async function registerUserRoutes(app: FastifyInstance) {
   });
 
   app.patch("/api/v1/me", async (request) => {
-    const authUser = await requireUser(request);
+    const authUser = await requireActiveUser(request);
     const body = updateMeBody.safeParse(request.body);
     if (!body.success) throw badRequest("Invalid profile payload", body.error.flatten());
 
@@ -33,7 +33,7 @@ export async function registerUserRoutes(app: FastifyInstance) {
   });
 
   app.get("/api/v1/me/orders", async (request) => {
-    const authUser = await requireUser(request);
+    const authUser = await requireActiveUser(request);
     const orders = await prisma.order.findMany({
       where: { userId: authUser.id },
       orderBy: { createdAt: "desc" },
@@ -43,7 +43,7 @@ export async function registerUserRoutes(app: FastifyInstance) {
   });
 
   app.get("/api/v1/me/orders/:publicId", async (request) => {
-    const authUser = await requireUser(request);
+    const authUser = await requireActiveUser(request);
     const params = z.object({ publicId: z.string().min(3) }).safeParse(request.params);
     if (!params.success) throw badRequest("Invalid order id", params.error.flatten());
 

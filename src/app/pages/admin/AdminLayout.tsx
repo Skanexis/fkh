@@ -5,6 +5,7 @@ import {
   Package,
   ShoppingBag,
   Users,
+  Settings,
   ArrowLeft,
   Menu,
   X,
@@ -17,6 +18,7 @@ const NAV_ITEMS = [
   { path: "/admin/products", icon: Package, labelKey: "admin.products" },
   { path: "/admin/orders", icon: ShoppingBag, labelKey: "admin.orders" },
   { path: "/admin/users", icon: Users, labelKey: "admin.users" },
+  { path: "/admin/settings", icon: Settings, labelKey: "admin.settings" },
 ];
 
 export function AdminLayout() {

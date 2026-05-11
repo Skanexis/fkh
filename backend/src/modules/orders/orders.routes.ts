@@ -2,8 +2,8 @@ import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { OrderStatus, ProductStatus } from "@prisma/client";
 import { z } from "zod";
-import { requireUser } from "../../common/auth.js";
-import { badRequest, forbidden, notFound } from "../../common/http-error.js";
+import { requireActiveUser } from "../../common/auth.js";
+import { badRequest, notFound } from "../../common/http-error.js";
 import { money } from "../../common/serialize.js";
 import { env } from "../../config/env.js";
 import { prisma } from "../../db/prisma.js";
@@ -13,6 +13,23 @@ const createOrderBody = z.object({
   customerComment: z.string().max(1000).optional(),
   customerEmail: z.string().email().optional(),
   customerPhone: z.string().min(5).max(40).optional(),
+  shipping: z.object({
+    fullName: z.string().min(2).max(120),
+    company: z.string().max(120).optional(),
+    addressLine1: z.string().min(3).max(180),
+    addressLine2: z.string().max(180).optional(),
+    city: z.string().min(2).max(100),
+    region: z.string().max(100).optional(),
+    postalCode: z.string().min(2).max(24),
+    country: z.string().min(2).max(100),
+    countryCode: z.string().min(2).max(2).transform((value) => value.toUpperCase()),
+    phone: z.string().min(5).max(40),
+    email: z.string().email().optional(),
+    taxId: z.string().max(80).optional(),
+    methodPreference: z.string().max(80).optional(),
+    pickupPoint: z.string().max(180).optional(),
+    instructions: z.string().max(1000).optional(),
+  }),
   items: z
     .array(
       z.object({
@@ -27,12 +44,11 @@ const createOrderBody = z.object({
 
 export async function registerOrderRoutes(app: FastifyInstance) {
   app.post("/api/v1/orders", async (request) => {
-    const authUser = await requireUser(request);
+    const authUser = await requireActiveUser(request);
     const body = createOrderBody.safeParse(request.body);
     if (!body.success) throw badRequest("Invalid order payload", body.error.flatten());
 
     const user = await prisma.user.findUniqueOrThrow({ where: { id: authUser.id } });
-    if (user.status !== "active") throw forbidden("User is not active");
 
     const tierIds = body.data.items.map((item) => item.priceTierId);
     const tiers = await prisma.productPriceTier.findMany({
@@ -77,8 +93,23 @@ export async function registerOrderRoutes(app: FastifyInstance) {
         telegramIdSnapshot: user.telegramId,
         telegramUsernameSnapshot: user.telegramUsername,
         customerName: user.name,
-        customerEmail: body.data.customerEmail ?? user.email,
-        customerPhone: body.data.customerPhone ?? user.phone,
+        customerEmail: body.data.customerEmail ?? body.data.shipping.email ?? user.email,
+        customerPhone: body.data.customerPhone ?? body.data.shipping.phone ?? user.phone,
+        shippingFullName: body.data.shipping.fullName,
+        shippingCompany: cleanOptional(body.data.shipping.company),
+        shippingAddressLine1: body.data.shipping.addressLine1,
+        shippingAddressLine2: cleanOptional(body.data.shipping.addressLine2),
+        shippingCity: body.data.shipping.city,
+        shippingRegion: cleanOptional(body.data.shipping.region),
+        shippingPostalCode: body.data.shipping.postalCode,
+        shippingCountry: body.data.shipping.country,
+        shippingCountryCode: body.data.shipping.countryCode,
+        shippingPhone: body.data.shipping.phone,
+        shippingEmail: cleanOptional(body.data.shipping.email),
+        shippingTaxId: cleanOptional(body.data.shipping.taxId),
+        shippingMethodPreference: cleanOptional(body.data.shipping.methodPreference),
+        shippingPickupPoint: cleanOptional(body.data.shipping.pickupPoint),
+        shippingInstructions: cleanOptional(body.data.shipping.instructions),
         customerComment: body.data.customerComment,
         subtotalAmount: total,
         totalAmount: total,
@@ -92,6 +123,11 @@ export async function registerOrderRoutes(app: FastifyInstance) {
 
     return { data: serializeOrder(order) };
   });
+}
+
+function cleanOptional(value?: string | null) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
 }
 
 async function createPublicOrderId() {
@@ -132,6 +168,23 @@ export function serializeOrder(order: any) {
     customerName: order.customerName,
     customerEmail: order.customerEmail,
     customerPhone: order.customerPhone,
+    shipping: {
+      fullName: order.shippingFullName,
+      company: order.shippingCompany,
+      addressLine1: order.shippingAddressLine1,
+      addressLine2: order.shippingAddressLine2,
+      city: order.shippingCity,
+      region: order.shippingRegion,
+      postalCode: order.shippingPostalCode,
+      country: order.shippingCountry,
+      countryCode: order.shippingCountryCode,
+      phone: order.shippingPhone,
+      email: order.shippingEmail,
+      taxId: order.shippingTaxId,
+      methodPreference: order.shippingMethodPreference,
+      pickupPoint: order.shippingPickupPoint,
+      instructions: order.shippingInstructions,
+    },
     status: order.status,
     subtotalAmount: money(order.subtotalAmount),
     totalAmount: money(order.totalAmount),

@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { User, UserSession } from "@prisma/client";
 import { env } from "../../config/env.js";
 import { prisma } from "../../db/prisma.js";
-import { badRequest, forbidden, notFound, unauthorized } from "../../common/http-error.js";
+import { badRequest, notFound, unauthorized } from "../../common/http-error.js";
 
 export function createNonce() {
   return crypto.randomBytes(24).toString("base64url");
@@ -108,10 +108,6 @@ export async function getTelegramLoginStatus(
     throw badRequest("Confirmed login request has no user");
   }
 
-  if (authRequest.user.status !== "active") {
-    throw forbidden("User is not active");
-  }
-
   if (authRequest.consumedAt) {
     return { status: "consumed" };
   }
@@ -138,8 +134,6 @@ export async function refreshToken(app: FastifyInstance, token: string, meta?: {
   });
 
   if (!isActiveSession(session)) throw unauthorized("Invalid refresh token");
-  if (session.user.status !== "active") throw forbidden("User is not active");
-
   await prisma.userSession.update({
     where: { id: session.id },
     data: { revokedAt: new Date() },

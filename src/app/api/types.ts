@@ -70,6 +70,25 @@ export interface ApiOrder {
   telegramIdSnapshot: string;
   telegramUsernameSnapshot?: string | null;
   customerName: string;
+  customerEmail?: string | null;
+  customerPhone?: string | null;
+  shipping?: {
+    fullName?: string | null;
+    company?: string | null;
+    addressLine1?: string | null;
+    addressLine2?: string | null;
+    city?: string | null;
+    region?: string | null;
+    postalCode?: string | null;
+    country?: string | null;
+    countryCode?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    taxId?: string | null;
+    methodPreference?: string | null;
+    pickupPoint?: string | null;
+    instructions?: string | null;
+  };
   status: "pending" | "accepted" | "completed" | "cancelled";
   totalAmount: number;
   subtotalAmount: number;
@@ -86,4 +105,30 @@ export interface DashboardStats {
   pendingOrders: number;
   ordersByStatus: Record<string, number>;
   recentOrders: ApiOrder[];
+}
+
+export interface ApiContact {
+  id: string;
+  type: "phone" | "telegram" | "whatsapp" | "email" | "address" | "custom";
+  label: string;
+  value: string;
+  href: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface ApiSiteSettings {
+  brandName: string;
+  logoUrl?: string | null;
+  updatedAt: string;
+}
+
+export interface ApiMediaAsset {
+  id: string;
+  type: "image" | "video";
+  url: string;
+  thumbnailUrl?: string | null;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
 }

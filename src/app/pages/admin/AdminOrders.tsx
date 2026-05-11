@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Clock, Package, CheckCircle, Search, ChevronDown, X } from "lucide-react";
+import { Clock, Package, CheckCircle, Search, X, MapPin, Truck, Phone, Mail } from "lucide-react";
 import { apiRequest } from "../../api/client";
 import { ApiOrder } from "../../api/types";
 import { useI18n } from "../../i18n";
@@ -9,11 +10,15 @@ type OrderStatus = "pending" | "accepted" | "completed";
 
 interface AdminOrder {
   id: string;
+  publicId: string;
   user: string;
   product: string;
   total: number;
   status: OrderStatus;
   date: string;
+  customerEmail?: string | null;
+  customerPhone?: string | null;
+  shipping?: ApiOrder["shipping"];
 }
 
 const STATUS_CONFIG = {
@@ -150,7 +155,7 @@ export function AdminOrders() {
             >
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <span style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 14 }}>{order.id}</span>
+                  <span style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 14 }}>{order.publicId}</span>
                   <span
                     className="flex items-center gap-1 px-2 py-0.5 rounded-full"
                     style={{ background: cfg.bg }}
@@ -190,7 +195,7 @@ export function AdminOrders() {
               initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 40 }}
-              className="w-full max-w-md rounded-2xl"
+              className="w-full max-w-md max-h-[88vh] overflow-y-auto rounded-2xl"
               style={{ background: "#111827", border: "1px solid rgba(255,255,255,0.08)" }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -213,7 +218,7 @@ export function AdminOrders() {
               <div className="p-5">
                 <div className="grid grid-cols-2 gap-3 mb-5">
                   {[
-                    { label: t("admin.orderId"), value: selectedOrder.id },
+                    { label: t("admin.orderId"), value: selectedOrder.publicId },
                     { label: t("admin.customer"), value: selectedOrder.user },
                     { label: t("admin.product"), value: selectedOrder.product },
                     { label: t("admin.date"), value: new Date(selectedOrder.date).toLocaleDateString(locale) },
@@ -233,6 +238,42 @@ export function AdminOrders() {
                   <span style={{ color: "#FF4D6D", fontWeight: 800, fontSize: 20 }}>
                     €{selectedOrder.total}
                   </span>
+                </div>
+
+                <div
+                  className="rounded-xl p-3 mb-5"
+                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <MapPin size={15} color="#FF4D6D" />
+                    <p style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 13 }}>Delivery</p>
+                  </div>
+                  <div className="space-y-2">
+                    <DeliveryLine label="Recipient" value={selectedOrder.shipping?.fullName} />
+                    <DeliveryLine label="Company" value={selectedOrder.shipping?.company} />
+                    <DeliveryLine
+                      label="Address"
+                      value={formatAddress(selectedOrder.shipping)}
+                    />
+                    <DeliveryLine
+                      icon={<Phone size={13} color="#6B7280" />}
+                      label="Phone"
+                      value={selectedOrder.shipping?.phone ?? selectedOrder.customerPhone}
+                    />
+                    <DeliveryLine
+                      icon={<Mail size={13} color="#6B7280" />}
+                      label="Email"
+                      value={selectedOrder.shipping?.email ?? selectedOrder.customerEmail}
+                    />
+                    <DeliveryLine label="VAT / Tax ID" value={selectedOrder.shipping?.taxId} />
+                    <DeliveryLine
+                      icon={<Truck size={13} color="#6B7280" />}
+                      label="Carrier"
+                      value={selectedOrder.shipping?.methodPreference}
+                    />
+                    <DeliveryLine label="Pickup point" value={selectedOrder.shipping?.pickupPoint} />
+                    <DeliveryLine label="Instructions" value={selectedOrder.shipping?.instructions} />
+                  </div>
                 </div>
 
                 {/* Status update */}
@@ -272,10 +313,42 @@ export function AdminOrders() {
 function toAdminOrder(order: ApiOrder): AdminOrder {
   return {
     id: order.id,
+    publicId: order.publicId,
     user: order.customerName,
     product: order.items.map((item) => `${item.productName} ${item.priceTierLabel}`).join(", "),
     total: order.totalAmount,
     status: order.status === "cancelled" ? "completed" : order.status,
     date: order.createdAt,
+    customerEmail: order.customerEmail,
+    customerPhone: order.customerPhone,
+    shipping: order.shipping,
   };
+}
+
+function DeliveryLine({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value?: string | null;
+  icon?: ReactNode;
+}) {
+  if (!value) return null;
+  return (
+    <div className="grid grid-cols-[96px_1fr] gap-2">
+      <p className="flex items-center gap-1" style={{ color: "#6B7280", fontSize: 11 }}>
+        {icon}
+        {label}
+      </p>
+      <p style={{ color: "#E5E7EB", fontSize: 12, lineHeight: 1.45, whiteSpace: "pre-line" }}>{value}</p>
+    </div>
+  );
+}
+
+function formatAddress(shipping: ApiOrder["shipping"]) {
+  if (!shipping) return null;
+  const cityLine = [shipping.postalCode, shipping.city, shipping.region].filter(Boolean).join(" ");
+  const countryLine = [shipping.country, shipping.countryCode ? `(${shipping.countryCode})` : null].filter(Boolean).join(" ");
+  return [shipping.addressLine1, shipping.addressLine2, cityLine, countryLine].filter(Boolean).join("\n");
 }

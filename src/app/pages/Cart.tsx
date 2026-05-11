@@ -10,6 +10,42 @@ import { apiRequest } from "../api/client";
 import { ApiOrder } from "../api/types";
 import { useI18n } from "../i18n";
 
+interface ShippingForm {
+  fullName: string;
+  company: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  region: string;
+  postalCode: string;
+  country: string;
+  countryCode: string;
+  phone: string;
+  email: string;
+  taxId: string;
+  methodPreference: string;
+  pickupPoint: string;
+  instructions: string;
+}
+
+const initialShippingForm: ShippingForm = {
+  fullName: "",
+  company: "",
+  addressLine1: "",
+  addressLine2: "",
+  city: "",
+  region: "",
+  postalCode: "",
+  country: "",
+  countryCode: "",
+  phone: "",
+  email: "",
+  taxId: "",
+  methodPreference: "DHL / UPS / InPost - best available",
+  pickupPoint: "",
+  instructions: "",
+};
+
 export function Cart() {
   const { items, removeItem, updateQuantity, total, clearCart } = useCart();
   const navigate = useNavigate();
@@ -17,6 +53,8 @@ export function Cart() {
   const { t } = useI18n();
   const [ordered, setOrdered] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [showShippingForm, setShowShippingForm] = useState(false);
+  const [shippingForm, setShippingForm] = useState<ShippingForm>(initialShippingForm);
 
   async function handleCheckout() {
     setCheckoutError(null);
@@ -26,11 +64,23 @@ export function Cart() {
       return;
     }
 
+    if (!showShippingForm) {
+      setShowShippingForm(true);
+      return;
+    }
+
+    const validationError = validateShippingForm(shippingForm);
+    if (validationError) {
+      setCheckoutError(validationError);
+      return;
+    }
+
     try {
       setOrdered(true);
       await apiRequest<ApiOrder>("/api/v1/orders", {
         method: "POST",
         body: JSON.stringify({
+          shipping: toShippingPayload(shippingForm),
           items: items.map((item) => ({
             productId: item.product.id,
             priceTierId: item.tier.id,
@@ -89,7 +139,7 @@ export function Cart() {
 
   return (
     <div
-      className="min-h-screen pb-40"
+      className="min-h-screen pb-60"
       style={{ background: "#0B0B0C", fontFamily: "Inter, sans-serif" }}
     >
       <TopBar title={t("nav.cart")} showBack />
@@ -205,6 +255,69 @@ export function Cart() {
           </motion.div>
         )}
 
+        {showShippingForm && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-4 rounded-2xl p-4"
+            style={{
+              background: "#1A1A1D",
+              border: "1px solid rgba(255,77,109,0.16)",
+            }}
+          >
+            <div className="mb-4">
+              <h2 style={{ color: "#FFFFFF", fontWeight: 800, fontSize: 18 }}>Dati di consegna</h2>
+              <p style={{ color: "#A0A0A0", fontSize: 12, marginTop: 4, lineHeight: 1.45 }}>
+                Inserisci i dati completi per spedizioni internazionali con DHL, UPS, InPost o altri corrieri.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3">
+              <ShippingInput label="Nome e cognome" required value={shippingForm.fullName} onChange={(value) => updateShipping("fullName", value)} />
+              <ShippingInput label="Azienda / Ragione sociale" value={shippingForm.company} onChange={(value) => updateShipping("company", value)} />
+              <ShippingInput label="Indirizzo" required value={shippingForm.addressLine1} onChange={(value) => updateShipping("addressLine1", value)} />
+              <ShippingInput label="Interno, scala, edificio" value={shippingForm.addressLine2} onChange={(value) => updateShipping("addressLine2", value)} />
+
+              <div className="grid grid-cols-2 gap-3">
+                <ShippingInput label="Citta" required value={shippingForm.city} onChange={(value) => updateShipping("city", value)} />
+                <ShippingInput label="Provincia / Stato" value={shippingForm.region} onChange={(value) => updateShipping("region", value)} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <ShippingInput label="CAP / ZIP" required value={shippingForm.postalCode} onChange={(value) => updateShipping("postalCode", value)} />
+                <ShippingInput label="Codice paese" required value={shippingForm.countryCode} onChange={(value) => updateShipping("countryCode", value.toUpperCase().slice(0, 2))} />
+              </div>
+
+              <ShippingInput label="Paese" required value={shippingForm.country} onChange={(value) => updateShipping("country", value)} />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <ShippingInput label="Telefono" required value={shippingForm.phone} onChange={(value) => updateShipping("phone", value)} />
+                <ShippingInput label="Email" type="email" value={shippingForm.email} onChange={(value) => updateShipping("email", value)} />
+              </div>
+
+              <ShippingInput label="VAT / Tax ID / EORI" value={shippingForm.taxId} onChange={(value) => updateShipping("taxId", value)} />
+              <ShippingInput label="Corriere preferito" value={shippingForm.methodPreference} onChange={(value) => updateShipping("methodPreference", value)} />
+              <ShippingInput label="Locker / pickup point / parcel shop" value={shippingForm.pickupPoint} onChange={(value) => updateShipping("pickupPoint", value)} />
+
+              <label className="block">
+                <span style={{ color: "#A0A0A0", fontSize: 12, fontWeight: 600 }}>Note per la consegna</span>
+                <textarea
+                  value={shippingForm.instructions}
+                  onChange={(event) => updateShipping("instructions", event.target.value)}
+                  rows={3}
+                  className="mt-1 w-full rounded-xl px-3 py-2 outline-none resize-none"
+                  style={{
+                    background: "rgba(255,255,255,0.06)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    color: "#FFFFFF",
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+            </div>
+          </motion.div>
+        )}
+
         {checkoutError && (
           <div
             className="mb-4 rounded-xl px-4 py-3 flex items-center gap-2"
@@ -256,7 +369,7 @@ export function Cart() {
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4 }}
-        className="fixed bottom-0 left-0 right-0 px-5 pb-6 pt-4"
+        className="fkh-cart-checkout fixed left-0 right-0 z-40 px-5 pb-3 pt-4"
         style={{
           background: "linear-gradient(to top, #0B0B0C 80%, transparent)",
         }}
@@ -285,7 +398,7 @@ export function Cart() {
             </>
           ) : (
             <>
-              {t("cart.checkout")} · {total}€
+              {showShippingForm ? "Conferma ordine" : t("cart.checkout")} · {total}€
               <ArrowRight size={20} strokeWidth={2.5} />
             </>
           )}
@@ -293,4 +406,86 @@ export function Cart() {
       </motion.div>
     </div>
   );
+
+  function updateShipping(field: keyof ShippingForm, value: string) {
+    setShippingForm((current) => ({ ...current, [field]: value }));
+  }
+}
+
+function ShippingInput({
+  label,
+  value,
+  onChange,
+  required,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+  type?: string;
+}) {
+  return (
+    <label className="block">
+      <span style={{ color: "#A0A0A0", fontSize: 12, fontWeight: 600 }}>
+        {label}
+        {required ? " *" : ""}
+      </span>
+      <input
+        value={value}
+        type={type}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-1 w-full rounded-xl px-3 py-2 outline-none"
+        style={{
+          background: "rgba(255,255,255,0.06)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          color: "#FFFFFF",
+          fontSize: 14,
+        }}
+      />
+    </label>
+  );
+}
+
+function validateShippingForm(form: ShippingForm) {
+  const required: Array<[keyof ShippingForm, string]> = [
+    ["fullName", "Nome e cognome"],
+    ["addressLine1", "Indirizzo"],
+    ["city", "Citta"],
+    ["postalCode", "CAP / ZIP"],
+    ["country", "Paese"],
+    ["countryCode", "Codice paese"],
+    ["phone", "Telefono"],
+  ];
+
+  const missing = required.find(([field]) => !form[field].trim());
+  if (missing) return `Compila il campo: ${missing[1]}`;
+  if (form.countryCode.trim().length !== 2) return "Il codice paese deve avere 2 lettere, es. IT, DE, US.";
+  if (form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim())) return "Inserisci una email valida.";
+  return null;
+}
+
+function toShippingPayload(form: ShippingForm) {
+  return {
+    fullName: form.fullName.trim(),
+    company: optionalString(form.company),
+    addressLine1: form.addressLine1.trim(),
+    addressLine2: optionalString(form.addressLine2),
+    city: form.city.trim(),
+    region: optionalString(form.region),
+    postalCode: form.postalCode.trim(),
+    country: form.country.trim(),
+    countryCode: form.countryCode.trim().toUpperCase(),
+    phone: form.phone.trim(),
+    email: optionalString(form.email),
+    taxId: optionalString(form.taxId),
+    methodPreference: optionalString(form.methodPreference),
+    pickupPoint: optionalString(form.pickupPoint),
+    instructions: optionalString(form.instructions),
+  };
+}
+
+function optionalString(value: string) {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
 }

@@ -2,6 +2,8 @@ import { Outlet, useLocation } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { BottomNav } from "./BottomNav";
 import { useI18n } from "../i18n";
+import { useAuth } from "../auth/auth-context";
+import { BannedNotice } from "./BannedNotice";
 
 const SECTIONS = [
   { match: /^\/$/, labelKey: "nav.home" },
@@ -15,8 +17,11 @@ const SECTIONS = [
 export function UserLayout() {
   const location = useLocation();
   const { t } = useI18n();
+  const { user } = useAuth();
   const activeIndex = Math.max(0, SECTIONS.findIndex((section) => section.match.test(location.pathname)));
   const activeSection = SECTIONS[activeIndex] ?? SECTIONS[0];
+  const isBanned = user?.status === "blocked" || user?.status === "deleted";
+  const shouldBlockRoute = isBanned && location.pathname !== "/profile";
 
   return (
     <div className="fkh-shell">
@@ -54,7 +59,13 @@ export function UserLayout() {
             exit={{ opacity: 0, y: -10, filter: "blur(6px)" }}
             transition={{ duration: 0.24, ease: "easeOut" }}
           >
-            <Outlet />
+            {shouldBlockRoute ? (
+              <div className="min-h-screen px-4 pt-20 pb-28" style={{ background: "#0B0B0C" }}>
+                <BannedNotice />
+              </div>
+            ) : (
+              <Outlet />
+            )}
           </motion.div>
         </AnimatePresence>
         <BottomNav />

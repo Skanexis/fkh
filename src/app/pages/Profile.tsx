@@ -9,6 +9,7 @@ import { apiRequest } from "../api/client";
 import { ApiOrder } from "../api/types";
 import { toProfileOrder } from "../api/adapters";
 import { useI18n } from "../i18n";
+import { BannedNotice } from "../components/BannedNotice";
 
 const STATUS_CONFIG = {
   pending: { labelKey: "status.pending", color: "#FF4D6D", bg: "rgba(255,77,109,0.12)" },
@@ -38,7 +39,7 @@ export function Profile() {
     let cancelled = false;
 
     async function loadOrders() {
-      if (!isAuthenticated) {
+      if (!isAuthenticated || user?.status !== "active") {
         setOrders([]);
         return;
       }
@@ -56,7 +57,7 @@ export function Profile() {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, user?.status]);
 
   const currentOrders = useMemo(
     () => orders.filter((o) => o.status !== "completed" && o.status !== "cancelled"),
@@ -67,6 +68,7 @@ export function Profile() {
     [orders],
   );
   const displayOrders = activeTab === "current" ? currentOrders : historyOrders;
+  const isBanned = user?.status === "blocked" || user?.status === "deleted";
 
   return (
     <div
@@ -134,7 +136,13 @@ export function Profile() {
               </div>
             </motion.div>
 
-            {isAdmin && (
+            {isBanned && (
+              <div className="mb-4">
+                <BannedNotice />
+              </div>
+            )}
+
+            {isAdmin && !isBanned && (
               <motion.button
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -175,6 +183,7 @@ export function Profile() {
               ))}
             </motion.div>
 
+            {!isBanned && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -292,6 +301,7 @@ export function Profile() {
                 </div>
               )}
             </motion.div>
+            )}
           </>
         )}
       </div>

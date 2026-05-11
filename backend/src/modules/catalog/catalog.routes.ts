@@ -5,6 +5,12 @@ import { badRequest, notFound } from "../../common/http-error.js";
 import { pageMeta, money } from "../../common/serialize.js";
 import { prisma } from "../../db/prisma.js";
 
+const db = prisma as typeof prisma & {
+  siteSettings: {
+    upsert: (args: any) => Promise<any>;
+  };
+};
+
 const productListQuery = z.object({
   search: z.string().optional(),
   category: z.string().optional(),
@@ -104,6 +110,15 @@ export async function registerCatalogRoutes(app: FastifyInstance) {
     });
     return { data: contacts };
   });
+
+  app.get("/api/v1/site-settings", async () => {
+    const settings = await db.siteSettings.upsert({
+      where: { id: "site" },
+      update: {},
+      create: { id: "site" },
+    });
+    return { data: serializeSiteSettings(settings) };
+  });
 }
 
 const productInclude = {
@@ -140,5 +155,13 @@ export function serializeProduct(product: any) {
       currency: tier.currency,
       sortOrder: tier.sortOrder,
     })),
+  };
+}
+
+export function serializeSiteSettings(settings: any) {
+  return {
+    brandName: settings.brandName,
+    logoUrl: settings.logoUrl,
+    updatedAt: settings.updatedAt.toISOString(),
   };
 }
