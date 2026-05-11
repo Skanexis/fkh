@@ -97,7 +97,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [accessToken, loadMe]);
 
   const startTelegramLogin = useCallback(() => {
-    return apiRequest<TelegramLoginStart>("/api/v1/auth/telegram/start", { method: "POST" });
+    return apiRequest<TelegramLoginStart>("/api/v1/auth/telegram/start", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
   }, []);
 
   const pollTelegramLogin = useCallback(
