@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { ImageUp, Plus, Save, Trash2, Settings, ExternalLink } from "lucide-react";
 import { apiRequest } from "../../api/client";
-import { ApiContact, ApiMediaAsset, ApiSiteSettings } from "../../api/types";
+import { ApiContact, ApiMediaAsset, ApiShippingMethod, ApiSiteSettings } from "../../api/types";
 import { useI18n } from "../../i18n";
 
 type ContactDraft = Omit<ApiContact, "id"> & { id?: string };
+type ShippingMethodDraft = Omit<ApiShippingMethod, "id" | "code"> & { id?: string; code?: string };
 
 const emptyContact: ContactDraft = {
   type: "telegram",
@@ -16,10 +17,17 @@ const emptyContact: ContactDraft = {
   sortOrder: 0,
 };
 
+const emptyShippingMethod: ShippingMethodDraft = {
+  label: "",
+  isActive: true,
+  sortOrder: 0,
+};
+
 export function AdminSettings() {
   const { t } = useI18n();
   const [settings, setSettings] = useState<ApiSiteSettings | null>(null);
   const [contacts, setContacts] = useState<ContactDraft[]>([]);
+  const [shippingMethods, setShippingMethods] = useState<ShippingMethodDraft[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,12 +37,14 @@ export function AdminSettings() {
 
   async function loadSettings() {
     try {
-      const [siteSettings, apiContacts] = await Promise.all([
+      const [siteSettings, apiContacts, apiShippingMethods] = await Promise.all([
         apiRequest<ApiSiteSettings>("/api/v1/admin/site-settings"),
         apiRequest<ApiContact[]>("/api/v1/admin/contacts"),
+        apiRequest<ApiShippingMethod[]>("/api/v1/admin/shipping-methods"),
       ]);
       setSettings(siteSettings);
       setContacts(apiContacts);
+      setShippingMethods(apiShippingMethods);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("admin.settingsError"));
@@ -74,7 +84,22 @@ export function AdminSettings() {
               : apiRequest<ApiContact>("/api/v1/admin/contacts", { method: "POST", body: JSON.stringify(payload) });
           }),
       );
+      const savedShippingMethods = await Promise.all(
+        shippingMethods
+          .filter((method) => method.label.trim())
+          .map((method) => {
+            const payload = {
+              label: method.label.trim(),
+              isActive: method.isActive,
+              sortOrder: Number(method.sortOrder) || 0,
+            };
+            return method.id
+              ? apiRequest<ApiShippingMethod>(`/api/v1/admin/shipping-methods/${method.id}`, { method: "PATCH", body: JSON.stringify(payload) })
+              : apiRequest<ApiShippingMethod>("/api/v1/admin/shipping-methods", { method: "POST", body: JSON.stringify(payload) });
+          }),
+      );
       setContacts(savedContacts);
+      setShippingMethods(savedShippingMethods);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("admin.settingsError"));
@@ -99,6 +124,24 @@ export function AdminSettings() {
 
   function updateContact(index: number, patch: Partial<ContactDraft>) {
     setContacts((current) => current.map((contact, itemIndex) => itemIndex === index ? { ...contact, ...patch } : contact));
+  }
+
+  async function removeShippingMethod(method: ShippingMethodDraft, index: number) {
+    if (!method.id) {
+      setShippingMethods((current) => current.filter((_, itemIndex) => itemIndex !== index));
+      return;
+    }
+
+    try {
+      await apiRequest<ApiShippingMethod>(`/api/v1/admin/shipping-methods/${method.id}`, { method: "DELETE" });
+      setShippingMethods((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("admin.settingsError"));
+    }
+  }
+
+  function updateShippingMethod(index: number, patch: Partial<ShippingMethodDraft>) {
+    setShippingMethods((current) => current.map((method, itemIndex) => itemIndex === index ? { ...method, ...patch } : method));
   }
 
   return (
@@ -251,6 +294,65 @@ export function AdminSettings() {
                       <Trash2 size={14} color="#ef4444" />
                     </button>
                   </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.section>
+
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.09 }}
+          className="rounded-2xl p-4 xl:col-span-2"
+          style={{ background: "#111827", border: "1px solid rgba(255,255,255,0.07)" }}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 16 }}>{t("admin.shippingMethods")}</h2>
+              <p style={{ color: "#6B7280", fontSize: 12 }}>{t("admin.shippingMethodsSubtitle")}</p>
+            </div>
+            <button
+              onClick={() => setShippingMethods((current) => [...current, { ...emptyShippingMethod, sortOrder: current.length * 10 }])}
+              className="flex items-center gap-2 rounded-xl px-3 py-2"
+              style={{ background: "rgba(59,130,246,0.12)", color: "#60A5FA", fontWeight: 700, fontSize: 12 }}
+            >
+              <Plus size={14} />
+              {t("admin.add")}
+            </button>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            {shippingMethods.map((method, index) => (
+              <div
+                key={method.id ?? index}
+                className="rounded-xl p-3"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
+              >
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_100px] gap-2">
+                  <ContactInput
+                    value={method.label}
+                    placeholder={t("admin.shippingMethodLabel")}
+                    onChange={(value) => updateShippingMethod(index, { label: value })}
+                  />
+                  <ContactInput
+                    value={String(method.sortOrder)}
+                    placeholder="#"
+                    onChange={(value) => updateShippingMethod(index, { sortOrder: Number(value) || 0 })}
+                  />
+                </div>
+                <div className="flex items-center justify-between mt-3">
+                  <label className="flex items-center gap-2" style={{ color: "#9CA3AF", fontSize: 12 }}>
+                    <input
+                      type="checkbox"
+                      checked={method.isActive}
+                      onChange={(event) => updateShippingMethod(index, { isActive: event.target.checked })}
+                    />
+                    {t("admin.active")}
+                  </label>
+                  <button onClick={() => void removeShippingMethod(method, index)} className="rounded-lg p-2" style={{ background: "rgba(239,68,68,0.1)" }}>
+                    <Trash2 size={14} color="#ef4444" />
+                  </button>
                 </div>
               </div>
             ))}

@@ -9,6 +9,9 @@ const db = prisma as typeof prisma & {
   siteSettings: {
     upsert: (args: any) => Promise<any>;
   };
+  shippingMethod: {
+    findMany: (args: any) => Promise<any[]>;
+  };
 };
 
 const productListQuery = z.object({
@@ -119,6 +122,14 @@ export async function registerCatalogRoutes(app: FastifyInstance) {
     });
     return { data: serializeSiteSettings(settings) };
   });
+
+  app.get("/api/v1/shipping-methods", async () => {
+    const methods = await db.shippingMethod.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
+    });
+    return { data: methods.map(serializeShippingMethod) };
+  });
 }
 
 const productInclude = {
@@ -163,5 +174,15 @@ export function serializeSiteSettings(settings: any) {
     brandName: settings.brandName,
     logoUrl: settings.logoUrl,
     updatedAt: settings.updatedAt.toISOString(),
+  };
+}
+
+export function serializeShippingMethod(method: any) {
+  return {
+    id: method.id,
+    code: method.code,
+    label: method.label,
+    isActive: method.isActive,
+    sortOrder: method.sortOrder,
   };
 }

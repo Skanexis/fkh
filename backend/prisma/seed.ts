@@ -249,6 +249,33 @@ async function main() {
       sortOrder: 10,
     },
   });
+
+  const shippingMethodDb = prisma as PrismaClient & {
+    shippingMethod: {
+      upsert: (args: any) => Promise<unknown>;
+    };
+  };
+
+  for (const [index, method] of [
+    { code: "dhl", label: "DHL" },
+    { code: "ups", label: "UPS" },
+    { code: "inpost", label: "InPost" },
+  ].entries()) {
+    await shippingMethodDb.shippingMethod.upsert({
+      where: { code: method.code },
+      update: {
+        label: method.label,
+        isActive: true,
+        sortOrder: (index + 1) * 10,
+      },
+      create: {
+        code: method.code,
+        label: method.label,
+        isActive: true,
+        sortOrder: (index + 1) * 10,
+      },
+    });
+  }
 }
 
 main()

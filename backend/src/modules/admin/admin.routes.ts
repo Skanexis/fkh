@@ -5,13 +5,18 @@ import { requireAdmin } from "../../common/auth.js";
 import { badRequest, notFound } from "../../common/http-error.js";
 import { money, pageMeta } from "../../common/serialize.js";
 import { prisma } from "../../db/prisma.js";
-import { serializeProduct, serializeSiteSettings } from "../catalog/catalog.routes.js";
+import { serializeProduct, serializeShippingMethod, serializeSiteSettings } from "../catalog/catalog.routes.js";
 import { assertOrderTransition, serializeOrder } from "../orders/orders.routes.js";
 import { serializeAuthUser } from "../auth/auth.service.js";
 
 const db = prisma as typeof prisma & {
   siteSettings: {
     upsert: (args: any) => Promise<any>;
+    update: (args: any) => Promise<any>;
+  };
+  shippingMethod: {
+    findMany: (args: any) => Promise<any[]>;
+    create: (args: any) => Promise<any>;
     update: (args: any) => Promise<any>;
   };
 };
@@ -70,6 +75,13 @@ const orderQuery = pagingQuery.extend({
 const siteSettingsPayload = z.object({
   brandName: z.string().min(1).max(80).optional(),
   logoUrl: z.string().url().nullable().optional(),
+});
+
+const shippingMethodPayload = z.object({
+  code: z.string().min(2).max(80).optional(),
+  label: z.string().min(2).max(120),
+  isActive: z.boolean().default(true),
+  sortOrder: z.number().int().default(0),
 });
 
 export async function registerAdminRoutes(app: FastifyInstance) {
@@ -374,6 +386,59 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     });
     await audit(request, admin.id, "site_settings.update", "SiteSettings", "site", before, settings);
     return { data: serializeSiteSettings(settings) };
+  });
+
+  app.get("/api/v1/admin/shipping-methods", async (request) => {
+    await requireAdmin(request);
+    const methods = await db.shippingMethod.findMany({ orderBy: [{ sortOrder: "asc" }, { label: "asc" }] });
+    return { data: methods.map(serializeShippingMethod) };
+  });
+
+  app.post("/api/v1/admin/shipping-methods", async (request) => {
+    const admin = await requireAdmin(request);
+    const body = shippingMethodPayload.safeParse(request.body);
+    if (!body.success) throw badRequest("Invalid shipping method payload", body.error.flatten());
+
+    const method = await db.shippingMethod.create({
+      data: {
+        code: body.data.code?.trim() || slugify(body.data.label),
+        label: body.data.label,
+        isActive: body.data.isActive,
+        sortOrder: body.data.sortOrder,
+      },
+    });
+    await audit(request, admin.id, "shipping_method.create", "ShippingMethod", method.id, null, method);
+    return { data: serializeShippingMethod(method) };
+  });
+
+  app.patch("/api/v1/admin/shipping-methods/:id", async (request) => {
+    const admin = await requireAdmin(request);
+    const id = parseId(request);
+    const body = shippingMethodPayload.partial().safeParse(request.body);
+    if (!body.success) throw badRequest("Invalid shipping method payload", body.error.flatten());
+
+    const method = await db.shippingMethod.update({
+      where: { id },
+      data: {
+        ...(body.data.code !== undefined ? { code: body.data.code.trim() || slugify(body.data.label ?? id) } : {}),
+        ...(body.data.label !== undefined ? { label: body.data.label } : {}),
+        ...(body.data.isActive !== undefined ? { isActive: body.data.isActive } : {}),
+        ...(body.data.sortOrder !== undefined ? { sortOrder: body.data.sortOrder } : {}),
+      },
+    });
+    await audit(request, admin.id, "shipping_method.update", "ShippingMethod", id, null, method);
+    return { data: serializeShippingMethod(method) };
+  });
+
+  app.delete("/api/v1/admin/shipping-methods/:id", async (request) => {
+    const admin = await requireAdmin(request);
+    const id = parseId(request);
+    const method = await db.shippingMethod.update({
+      where: { id },
+      data: { isActive: false },
+    });
+    await audit(request, admin.id, "shipping_method.disable", "ShippingMethod", id, null, method);
+    return { data: serializeShippingMethod(method) };
   });
 }
 

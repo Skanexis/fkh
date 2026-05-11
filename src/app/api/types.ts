@@ -132,3 +132,11 @@ export interface ApiMediaAsset {
   sizeBytes: number;
   createdAt: string;
 }
+
+export interface ApiShippingMethod {
+  id: string;
+  code: string;
+  label: string;
+  isActive: boolean;
+  sortOrder: number;
+}
