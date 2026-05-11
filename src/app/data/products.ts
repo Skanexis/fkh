@@ -4,6 +4,15 @@ export interface PriceTier {
   price: number;
 }
 
+export interface ProductMedia {
+  id?: string;
+  type: "image" | "video";
+  url: string;
+  thumbnailUrl?: string | null;
+  alt?: string | null;
+  sortOrder?: number;
+}
+
 export interface Product {
   id: string;
   slug?: string;
@@ -13,6 +22,7 @@ export interface Product {
   description: string;
   longDescription: string;
   images: string[];
+  media?: ProductMedia[];
   priceTiers: PriceTier[];
   badge?: string;
   featured?: boolean;

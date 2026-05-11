@@ -182,7 +182,18 @@ export function serializeShippingMethod(method: any) {
     id: method.id,
     code: method.code,
     label: method.label,
+    priceAmount: money(effectiveShippingPrice(method)),
     isActive: method.isActive,
     sortOrder: method.sortOrder,
   };
+}
+
+function inferShippingPrice(label: string) {
+  const match = label.match(/(\d+(?:[.,]\d+)?)\s*(?:EUR|€)/i);
+  return match ? Number(match[1].replace(",", ".")) : 0;
+}
+
+function effectiveShippingPrice(method: any) {
+  const price = money(method.priceAmount ?? 0);
+  return price > 0 ? price : inferShippingPrice(method.label);
 }

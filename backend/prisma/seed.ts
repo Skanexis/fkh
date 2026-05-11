@@ -560,22 +560,24 @@ async function main() {
   };
 
   for (const [index, method] of [
-    { code: "correos-spain", label: "Correos Spain - 50 EUR" },
-    { code: "inpost", label: "InPost / Mondial Relay - 20 EUR" },
-    { code: "seur", label: "Seur / DPD / BRT - 50 EUR" },
-    { code: "ups", label: "UPS - 50 EUR" },
-    { code: "dhl", label: "DHL - 50 EUR" },
+    { code: "correos-spain", label: "Correos Spain", priceAmount: 50 },
+    { code: "inpost", label: "InPost / Mondial Relay", priceAmount: 20 },
+    { code: "seur", label: "Seur / DPD / BRT", priceAmount: 50 },
+    { code: "ups", label: "UPS", priceAmount: 50 },
+    { code: "dhl", label: "DHL", priceAmount: 50 },
   ].entries()) {
     await shippingMethodDb.shippingMethod.upsert({
       where: { code: method.code },
       update: {
         label: method.label,
+        priceAmount: method.priceAmount,
         isActive: true,
         sortOrder: (index + 1) * 10,
       },
       create: {
         code: method.code,
         label: method.label,
+        priceAmount: method.priceAmount,
         isActive: true,
         sortOrder: (index + 1) * 10,
       },

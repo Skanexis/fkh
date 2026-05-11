@@ -19,6 +19,7 @@ const emptyContact: ContactDraft = {
 
 const emptyShippingMethod: ShippingMethodDraft = {
   label: "",
+  priceAmount: 0,
   isActive: true,
   sortOrder: 0,
 };
@@ -90,6 +91,7 @@ export function AdminSettings() {
           .map((method) => {
             const payload = {
               label: method.label.trim(),
+              priceAmount: Number(method.priceAmount) || 0,
               isActive: method.isActive,
               sortOrder: Number(method.sortOrder) || 0,
             };
@@ -329,11 +331,17 @@ export function AdminSettings() {
                 className="rounded-xl p-3"
                 style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
               >
-                <div className="grid grid-cols-1 md:grid-cols-[1fr_100px] gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_120px_100px] gap-2">
                   <ContactInput
                     value={method.label}
                     placeholder={t("admin.shippingMethodLabel")}
                     onChange={(value) => updateShippingMethod(index, { label: value })}
+                  />
+                  <ContactInput
+                    value={String(method.priceAmount ?? 0)}
+                    placeholder={t("admin.shippingMethodPrice")}
+                    type="number"
+                    onChange={(value) => updateShippingMethod(index, { priceAmount: Number(value) || 0 })}
                   />
                   <ContactInput
                     value={String(method.sortOrder)}
@@ -363,10 +371,13 @@ export function AdminSettings() {
   );
 }
 
-function ContactInput({ value, placeholder, onChange }: { value: string; placeholder: string; onChange: (value: string) => void }) {
+function ContactInput({ value, placeholder, onChange, type = "text" }: { value: string; placeholder: string; onChange: (value: string) => void; type?: string }) {
   return (
     <input
       value={value}
+      type={type}
+      min={type === "number" ? 0 : undefined}
+      step={type === "number" ? 0.01 : undefined}
       placeholder={placeholder}
       onChange={(event) => onChange(event.target.value)}
       className="rounded-lg px-3 py-2 outline-none"

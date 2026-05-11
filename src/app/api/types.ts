@@ -98,6 +98,7 @@ export interface ApiOrder {
   status: "pending" | "accepted" | "completed" | "cancelled";
   totalAmount: number;
   subtotalAmount: number;
+  shippingAmount: number;
   currency: string;
   createdAt: string;
   updatedAt: string;
@@ -143,6 +144,7 @@ export interface ApiShippingMethod {
   id: string;
   code: string;
   label: string;
+  priceAmount: number;
   isActive: boolean;
   sortOrder: number;
 }

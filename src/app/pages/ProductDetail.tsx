@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import { AlertCircle, Star, ShoppingCart, ChevronLeft, ChevronRight, Minus, Plus, Check } from "lucide-react";
-import { Product } from "../data/products";
+import { Product, ProductMedia } from "../data/products";
 import { useCart } from "../store/cart-context";
 import { TopBar } from "../components/TopBar";
+import { ProductMediaPlayer } from "../components/ProductMediaPlayer";
 import { apiRequest } from "../api/client";
 import { ApiProduct } from "../api/types";
 import { toProduct } from "../api/adapters";
@@ -68,6 +69,9 @@ export function ProductDetail() {
 
   const selectedTier = product.priceTiers[selectedTierIdx];
   const totalPrice = selectedTier.price * quantity;
+  const galleryMedia = getGalleryMedia(product);
+  const activeMediaIndex = Math.min(imgIdx, Math.max(galleryMedia.length - 1, 0));
+  const activeMedia = galleryMedia[activeMediaIndex];
 
   function handleAdd() {
     addItem(product, selectedTier, quantity);
@@ -90,16 +94,24 @@ export function ProductDetail() {
       {/* Image Gallery */}
       <div className="relative" style={{ height: "42dvh", minHeight: 260 }}>
         <AnimatePresence mode="wait">
-          <motion.img
-            key={imgIdx}
-            src={product.images[imgIdx]}
-            alt={product.name}
-            className="absolute inset-0 w-full h-full object-cover"
+          <motion.div
+            key={`${activeMedia.type}-${activeMedia.url}-${activeMediaIndex}`}
+            className="absolute inset-0"
             initial={{ opacity: 0, scale: 1.05 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.35 }}
-          />
+          >
+            {activeMedia.type === "video" ? (
+              <ProductMediaPlayer media={activeMedia} title={product.name} />
+            ) : (
+              <img
+                src={activeMedia.url}
+                alt={activeMedia.alt ?? product.name}
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            )}
+          </motion.div>
         </AnimatePresence>
 
         {/* Gradient overlay */}
@@ -107,6 +119,7 @@ export function ProductDetail() {
           className="absolute inset-0"
           style={{
             background: "linear-gradient(to bottom, rgba(11,11,12,0.3) 0%, transparent 40%, rgba(11,11,12,0.9) 100%)",
+            pointerEvents: "none",
           }}
         />
 
@@ -149,31 +162,31 @@ export function ProductDetail() {
         )}
 
         {/* Gallery nav */}
-        {product.images.length > 1 && (
+        {galleryMedia.length > 1 && (
           <>
             <button
-              onClick={() => setImgIdx((i) => (i === 0 ? product.images.length - 1 : i - 1))}
+              onClick={() => setImgIdx((i) => (i === 0 ? galleryMedia.length - 1 : i - 1))}
               className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full p-2"
               style={{ background: "rgba(0,0,0,0.5)" }}
             >
               <ChevronLeft size={18} color="#FFFFFF" />
             </button>
             <button
-              onClick={() => setImgIdx((i) => (i === product.images.length - 1 ? 0 : i + 1))}
+              onClick={() => setImgIdx((i) => (i === galleryMedia.length - 1 ? 0 : i + 1))}
               className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full p-2"
               style={{ background: "rgba(0,0,0,0.5)" }}
             >
               <ChevronRight size={18} color="#FFFFFF" />
             </button>
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-              {product.images.map((_, i) => (
+              {galleryMedia.map((item, i) => (
                 <button key={i} onClick={() => setImgIdx(i)}>
                   <div
                     style={{
-                      width: i === imgIdx ? 20 : 6,
+                      width: i === activeMediaIndex ? 20 : 6,
                       height: 6,
                       borderRadius: 3,
-                      background: i === imgIdx ? "#FF4D6D" : "rgba(255,255,255,0.4)",
+                      background: i === activeMediaIndex ? "#FF4D6D" : item.type === "video" ? "rgba(255,77,109,0.45)" : "rgba(255,255,255,0.4)",
                       transition: "all 0.25s",
                     }}
                   />
@@ -354,4 +367,21 @@ export function ProductDetail() {
       </motion.div>
     </div>
   );
+}
+
+function getGalleryMedia(product: Product): ProductMedia[] {
+  const media = product.media?.filter((item) => item.url) ?? [];
+  if (media.length) return media;
+
+  const images = product.images
+    .filter(Boolean)
+    .map((url, index) => ({
+      id: `${product.id}-image-${index}`,
+      type: "image",
+      url,
+      thumbnailUrl: url,
+      alt: product.name,
+      sortOrder: (index + 1) * 10,
+    }));
+  return images.length ? images : [{ id: `${product.id}-empty`, type: "image", url: "", alt: product.name }];
 }

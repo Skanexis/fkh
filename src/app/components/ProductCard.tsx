@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
-import { ShoppingCart, Star, ChevronLeft, ChevronRight } from "lucide-react";
+import { ShoppingCart, Star, ChevronLeft, ChevronRight, Video } from "lucide-react";
 import { Product } from "../data/products";
 import { useCart } from "../store/cart-context";
 import { useI18n } from "../i18n";
@@ -20,6 +20,8 @@ export function ProductCard({ product, variant = "standard" }: ProductCardProps)
   const [added, setAdded] = useState(false);
 
   const selectedTier = product.priceTiers[selectedTierIdx];
+  const imageGallery = product.images.filter(Boolean);
+  const hasVideo = product.media?.some((item) => item.type === "video") ?? false;
 
   function handleAdd(e: React.MouseEvent) {
     e.stopPropagation();
@@ -30,12 +32,12 @@ export function ProductCard({ product, variant = "standard" }: ProductCardProps)
 
   function handlePrevImg(e: React.MouseEvent) {
     e.stopPropagation();
-    setImgIdx((i) => (i === 0 ? product.images.length - 1 : i - 1));
+    setImgIdx((i) => (i === 0 ? imageGallery.length - 1 : i - 1));
   }
 
   function handleNextImg(e: React.MouseEvent) {
     e.stopPropagation();
-    setImgIdx((i) => (i === product.images.length - 1 ? 0 : i + 1));
+    setImgIdx((i) => (i === imageGallery.length - 1 ? 0 : i + 1));
   }
 
   const BADGE_COLORS: Record<string, string> = {
@@ -60,18 +62,27 @@ export function ProductCard({ product, variant = "standard" }: ProductCardProps)
       <div className="fkh-card-signal" />
       {/* Image Gallery */}
       <div className="relative overflow-hidden" style={{ aspectRatio: "1/1" }}>
-        <AnimatePresence mode="wait">
-          <motion.img
-            key={imgIdx}
-            src={product.images[imgIdx]}
-            alt={product.name}
-            className="fkh-product-image w-full h-full object-cover"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
-          />
-        </AnimatePresence>
+        {imageGallery.length > 0 ? (
+          <AnimatePresence mode="wait">
+            <motion.img
+              key={imgIdx}
+              src={imageGallery[Math.min(imgIdx, imageGallery.length - 1)]}
+              alt={product.name}
+              className="fkh-product-image w-full h-full object-cover"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25 }}
+            />
+          </AnimatePresence>
+        ) : (
+          <div
+            className="absolute inset-0 flex items-center justify-center"
+            style={{ background: "linear-gradient(135deg, rgba(255,77,109,0.16), rgba(59,130,246,0.12))" }}
+          >
+            <Video size={34} color={hasVideo ? "#FF4D6D" : "#6B7280"} strokeWidth={1.8} />
+          </div>
+        )}
 
         {/* Gradient overlay */}
         <div
@@ -80,7 +91,7 @@ export function ProductCard({ product, variant = "standard" }: ProductCardProps)
         />
 
         {/* Gallery nav */}
-        {product.images.length > 1 && (
+        {imageGallery.length > 1 && (
           <>
             <button
               onClick={handlePrevImg}
@@ -97,7 +108,7 @@ export function ProductCard({ product, variant = "standard" }: ProductCardProps)
               <ChevronRight size={14} color="#FFFFFF" />
             </button>
             <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 flex gap-1">
-              {product.images.map((_, i) => (
+              {imageGallery.map((_, i) => (
                 <div
                   key={i}
                   style={{

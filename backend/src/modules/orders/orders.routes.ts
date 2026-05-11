@@ -13,6 +13,7 @@ const createOrderBody = z.object({
   customerEmail: z.string().email().optional(),
   customerPhone: z.string().min(5).max(40).optional(),
   shipping: z.object({
+    methodId: z.string().uuid(),
     fullName: z.string().min(2).max(120),
     company: z.string().max(120).optional(),
     addressLine1: z.string().min(3).max(180),
@@ -25,7 +26,6 @@ const createOrderBody = z.object({
     phone: z.string().min(5).max(40),
     email: z.string().email().optional(),
     taxId: z.string().max(80).optional(),
-    methodPreference: z.string().max(80).optional(),
     pickupPoint: z.string().max(180).optional(),
     instructions: z.string().max(1000).optional(),
   }),
@@ -48,6 +48,10 @@ export async function registerOrderRoutes(app: FastifyInstance) {
     if (!body.success) throw badRequest("Invalid order payload", body.error.flatten());
 
     const user = await prisma.user.findUniqueOrThrow({ where: { id: authUser.id } });
+    const shippingMethod = await prisma.shippingMethod.findFirst({
+      where: { id: body.data.shipping.methodId, isActive: true },
+    });
+    if (!shippingMethod) throw badRequest("Invalid shipping method");
 
     const tierIds = body.data.items.map((item) => item.priceTierId);
     const tiers = await prisma.productPriceTier.findMany({
@@ -82,7 +86,9 @@ export async function registerOrderRoutes(app: FastifyInstance) {
       };
     });
 
-    const total = orderItems.reduce((sum, item) => sum + item.lineTotal, 0);
+    const subtotal = orderItems.reduce((sum, item) => sum + item.lineTotal, 0);
+    const shippingAmount = effectiveShippingPrice(shippingMethod);
+    const total = subtotal + shippingAmount;
     const order = await prisma.$transaction(async (tx) => {
       const publicId = await createPublicOrderId(tx);
       return tx.order.create({
@@ -106,11 +112,12 @@ export async function registerOrderRoutes(app: FastifyInstance) {
           shippingPhone: body.data.shipping.phone,
           shippingEmail: cleanOptional(body.data.shipping.email),
           shippingTaxId: cleanOptional(body.data.shipping.taxId),
-          shippingMethodPreference: cleanOptional(body.data.shipping.methodPreference),
+          shippingMethodPreference: shippingMethod.label,
           shippingPickupPoint: cleanOptional(body.data.shipping.pickupPoint),
           shippingInstructions: cleanOptional(body.data.shipping.instructions),
           customerComment: body.data.customerComment,
-          subtotalAmount: total,
+          subtotalAmount: subtotal,
+          shippingAmount,
           totalAmount: total,
           currency: "EUR",
           items: { create: orderItems },
@@ -128,6 +135,16 @@ export async function registerOrderRoutes(app: FastifyInstance) {
 function cleanOptional(value?: string | null) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+function inferShippingPrice(label: string) {
+  const match = label.match(/(\d+(?:[.,]\d+)?)\s*(?:EUR|€)/i);
+  return match ? Number(match[1].replace(",", ".")) : 0;
+}
+
+function effectiveShippingPrice(method: any) {
+  const price = money(method.priceAmount ?? 0);
+  return price > 0 ? price : inferShippingPrice(method.label);
 }
 
 async function createPublicOrderId(tx: any) {
@@ -208,7 +225,7 @@ function formatAdminOrderMessage(order: any) {
     items,
     "",
     `<b>Сумма:</b> ${money(order.totalAmount)} ${order.currency}`,
-    `<b>Доставка:</b> ${escapeHtml(order.shippingMethodPreference ?? "-")}`,
+    `<b>Доставка:</b> ${escapeHtml(order.shippingMethodPreference ?? "-")} (${money(order.shippingAmount ?? 0)} ${order.currency})`,
     order.shippingPickupPoint ? `<b>Pickup point:</b> ${escapeHtml(order.shippingPickupPoint)}` : null,
     "",
     "<b>Адрес:</b>",
@@ -266,6 +283,7 @@ export function serializeOrder(order: any) {
     },
     status: order.status,
     subtotalAmount: money(order.subtotalAmount),
+    shippingAmount: money(order.shippingAmount ?? 0),
     totalAmount: money(order.totalAmount),
     currency: order.currency,
     customerComment: order.customerComment,

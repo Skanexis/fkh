@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { DragEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Plus, Edit2, Trash2, X, Check, Search, Image } from "lucide-react";
-import { Product } from "../../data/products";
+import { Plus, Edit2, Trash2, X, Check, Search, Image, Upload, Video, Link2, Loader2 } from "lucide-react";
+import { Product, ProductMedia } from "../../data/products";
 import { apiRequest } from "../../api/client";
-import { ApiCategory, ApiProduct } from "../../api/types";
+import { ApiCategory, ApiMediaAsset, ApiProduct } from "../../api/types";
 import { toProduct } from "../../api/adapters";
 import { useI18n } from "../../i18n";
 
@@ -18,6 +19,10 @@ export function AdminProducts() {
   const [showModal, setShowModal] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [mediaUrl, setMediaUrl] = useState("");
+  const [mediaUrlType, setMediaUrlType] = useState<ProductMedia["type"]>("image");
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const mediaInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     void loadProducts();
@@ -45,6 +50,8 @@ export function AdminProducts() {
 
   function handleEdit(product: Product) {
     setEditingProduct({ ...product });
+    setMediaUrl("");
+    setMediaUrlType("image");
     setShowModal(true);
   }
 
@@ -57,10 +64,13 @@ export function AdminProducts() {
       description: "",
       longDescription: "",
       images: [],
+      media: [],
       priceTiers: [{ weight: "1g", price: 10 }],
       rating: 0,
       reviews: 0,
     });
+    setMediaUrl("");
+    setMediaUrlType("image");
     setShowModal(true);
   }
 
@@ -91,16 +101,16 @@ export function AdminProducts() {
         sortOrder: (index + 1) * 10,
         isActive: true,
       })),
-      media: editingProduct.images
-        .filter(Boolean)
-        .map((url, index) => ({
-          type: "image",
-          url,
-          thumbnailUrl: url,
-          mimeType: "image/jpeg",
+      media: getEditableMedia(editingProduct)
+        .filter((item) => item.url)
+        .map((item, index) => ({
+          type: item.type,
+          url: item.url,
+          thumbnailUrl: item.type === "image" ? item.thumbnailUrl || item.url : item.thumbnailUrl ?? null,
+          mimeType: item.type === "video" ? mimeFromVideoUrl(item.url) : "image/jpeg",
           sizeBytes: 0,
           sortOrder: (index + 1) * 10,
-          alt: editingProduct.name,
+          alt: item.alt ?? editingProduct.name,
         })),
     };
 
@@ -121,6 +131,58 @@ export function AdminProducts() {
     }
     setShowModal(false);
     setEditingProduct(null);
+  }
+
+  async function handleMediaUpload(file: File) {
+    if (!editingProduct) return;
+    setUploadingMedia(true);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const media = await apiRequest<ApiMediaAsset>("/api/v1/admin/media", { method: "POST", body });
+      addMediaToDraft({
+        id: media.id,
+        type: media.type,
+        url: media.url,
+        thumbnailUrl: media.thumbnailUrl,
+        alt: editingProduct.name,
+        sortOrder: (getEditableMedia(editingProduct).length + 1) * 10,
+      });
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("admin.uploadMediaError"));
+    } finally {
+      setUploadingMedia(false);
+    }
+  }
+
+  function handleMediaFileSelect(file: File | undefined) {
+    if (file && !uploadingMedia) void handleMediaUpload(file);
+  }
+
+  function handleMediaDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    handleMediaFileSelect(event.dataTransfer.files[0]);
+  }
+
+  function handleAddMediaUrl() {
+    if (!mediaUrl.trim() || !editingProduct) return;
+    addMediaToDraft({
+      type: mediaUrlType,
+      url: mediaUrl.trim(),
+      thumbnailUrl: mediaUrlType === "image" ? mediaUrl.trim() : null,
+      alt: editingProduct.name,
+      sortOrder: (getEditableMedia(editingProduct).length + 1) * 10,
+    });
+    setMediaUrl("");
+  }
+
+  function addMediaToDraft(media: ProductMedia) {
+    setEditingProduct((current) => current ? { ...current, media: [...getEditableMedia(current), media] } : current);
+  }
+
+  function removeMediaFromDraft(index: number) {
+    setEditingProduct((current) => current ? { ...current, media: getEditableMedia(current).filter((_, itemIndex) => itemIndex !== index) } : current);
   }
 
   async function handleDelete(id: string) {
@@ -182,7 +244,7 @@ export function AdminProducts() {
       {/* Products table */}
       <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
         <div
-          className="grid grid-cols-12 px-4 py-2.5"
+          className="hidden md:grid grid-cols-12 px-4 py-2.5"
           style={{ background: "#111827", borderBottom: "1px solid rgba(255,255,255,0.06)" }}
         >
           {[t("admin.product"), t("admin.category"), t("admin.minPrice"), t("admin.actions")].map((h) => (
@@ -202,20 +264,27 @@ export function AdminProducts() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: i * 0.04 }}
-            className="grid grid-cols-12 px-4 py-3 items-center"
+            className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-2 px-4 py-3 md:grid-cols-12 md:gap-0 md:items-center"
             style={{
               borderBottom: i < filtered.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none",
               background: i % 2 === 0 ? "rgba(255,255,255,0.01)" : "transparent",
             }}
           >
             {/* Product */}
-            <div className="col-span-5 flex items-center gap-3 min-w-0">
+            <div className="min-w-0 flex items-start gap-3 md:col-span-5 md:items-center">
               <div
                 className="rounded-lg overflow-hidden flex-shrink-0"
                 style={{ width: 40, height: 40 }}
               >
                 {product.images[0] ? (
                   <img src={product.images[0]} alt={product.name} className="w-full h-full object-cover" />
+                ) : getEditableMedia(product)[0]?.type === "video" ? (
+                  <div
+                    className="w-full h-full flex items-center justify-center"
+                    style={{ background: "rgba(255,77,109,0.12)" }}
+                  >
+                    <Video size={16} color="#FF4D6D" />
+                  </div>
                 ) : (
                   <div
                     className="w-full h-full flex items-center justify-center"
@@ -226,7 +295,7 @@ export function AdminProducts() {
                 )}
               </div>
               <div className="min-w-0">
-                <p style={{ color: "#FFFFFF", fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <p style={{ color: "#FFFFFF", fontSize: 13, fontWeight: 600, overflowWrap: "anywhere", lineHeight: 1.25 }}>
                   {product.name}
                 </p>
                 <p style={{ color: "#6B7280", fontSize: 11 }}>{product.brand}</p>
@@ -234,7 +303,7 @@ export function AdminProducts() {
             </div>
 
             {/* Category */}
-            <div className="col-span-3">
+            <div className="col-start-1 md:col-span-3 md:col-start-auto">
               <span
                 className="px-2 py-0.5 rounded-full"
                 style={{
@@ -249,14 +318,14 @@ export function AdminProducts() {
             </div>
 
             {/* Min price */}
-            <div className="col-span-2">
+            <div className="col-start-1 md:col-span-2 md:col-start-auto">
               <span style={{ color: "#FF4D6D", fontWeight: 700, fontSize: 13 }}>
                 {product.priceTiers[0]?.price}€
               </span>
             </div>
 
             {/* Actions */}
-            <div className="col-span-2 flex gap-1.5">
+            <div className="col-start-2 row-span-3 row-start-1 flex gap-1.5 self-center md:col-span-2 md:col-start-auto md:row-auto md:self-auto">
               <button
                 onClick={() => handleEdit(product)}
                 className="p-1.5 rounded-lg"
@@ -446,19 +515,131 @@ export function AdminProducts() {
                   </div>
                 </div>
 
-                {/* Image URL */}
+                {/* Product media */}
                 <div>
-                  <label style={{ color: "#9CA3AF", fontSize: 12, fontWeight: 600 }}>{t("admin.imageUrl")}</label>
+                  <label style={{ color: "#9CA3AF", fontSize: 12, fontWeight: 600 }}>{t("admin.media")}</label>
                   <div
-                    className="mt-1.5 rounded-xl p-4 flex flex-col items-center justify-center gap-2"
+                    className="mt-1.5 rounded-xl p-4 flex flex-col gap-3"
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={handleMediaDrop}
                     style={{
                       background: "rgba(255,255,255,0.03)",
                       border: "2px dashed rgba(59,130,246,0.3)",
-                      minHeight: 80,
                     }}
                   >
-                    <Image size={24} color="#3B82F6" strokeWidth={1.5} />
-                    <p style={{ color: "#6B7280", fontSize: 12 }}>{t("admin.imageHelp")}</p>
+                    <button
+                      type="button"
+                      onClick={() => mediaInputRef.current?.click()}
+                      disabled={uploadingMedia}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3"
+                      style={{
+                        background: "rgba(59,130,246,0.1)",
+                        border: "1px solid rgba(59,130,246,0.25)",
+                        color: "#60A5FA",
+                        fontWeight: 700,
+                        fontSize: 13,
+                        opacity: uploadingMedia ? 0.75 : 1,
+                        minHeight: 48,
+                      }}
+                    >
+                      {uploadingMedia ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                      {uploadingMedia ? t("admin.uploading") : t("admin.uploadMedia")}
+                    </button>
+                    <input
+                      ref={mediaInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,video/mp4,video/webm"
+                      className="sr-only"
+                      disabled={uploadingMedia}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        event.currentTarget.value = "";
+                        handleMediaFileSelect(file);
+                      }}
+                    />
+
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[96px_1fr_auto]">
+                      <select
+                        value={mediaUrlType}
+                        onChange={(e) => setMediaUrlType(e.target.value as ProductMedia["type"])}
+                        className="px-3 py-2 rounded-xl outline-none"
+                        style={{
+                          background: "#1F2937",
+                          border: "1px solid rgba(255,255,255,0.08)",
+                          color: "#FFFFFF",
+                          fontSize: 13,
+                        }}
+                      >
+                        <option value="image">{t("admin.image")}</option>
+                        <option value="video">{t("admin.video")}</option>
+                      </select>
+                      <input
+                        value={mediaUrl}
+                        onChange={(e) => setMediaUrl(e.target.value)}
+                        placeholder={t("admin.mediaUrl")}
+                        className="px-3 py-2 rounded-xl outline-none min-w-0"
+                        style={{
+                          background: "rgba(255,255,255,0.06)",
+                          border: "1px solid rgba(255,255,255,0.08)",
+                          color: "#FFFFFF",
+                          fontSize: 13,
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddMediaUrl}
+                        className="px-3 py-2 rounded-xl flex items-center justify-center gap-2"
+                        style={{ background: "rgba(59,130,246,0.15)", color: "#60A5FA", minHeight: 42 }}
+                      >
+                        <Link2 size={15} />
+                        <span className="sm:hidden" style={{ fontSize: 13, fontWeight: 700 }}>{t("admin.add")}</span>
+                      </button>
+                    </div>
+
+                    <p style={{ color: "#6B7280", fontSize: 12 }}>{t("admin.mediaHelp")}</p>
+
+                    {getEditableMedia(editingProduct).length > 0 && (
+                      <div className="flex flex-col gap-2">
+                        {getEditableMedia(editingProduct).map((media, index) => (
+                          <div
+                            key={`${media.url}-${index}`}
+                            className="flex items-center gap-3 rounded-xl p-2"
+                            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
+                          >
+                            <div
+                              className="rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0"
+                              style={{
+                                width: 52,
+                                height: 52,
+                                background: media.type === "video" ? "rgba(255,77,109,0.12)" : "rgba(59,130,246,0.12)",
+                              }}
+                            >
+                              {media.type === "image" ? (
+                                <img src={media.thumbnailUrl || media.url} alt={media.alt ?? editingProduct.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <Video size={20} color="#FF4D6D" />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p style={{ color: "#FFFFFF", fontSize: 12, fontWeight: 700 }}>
+                                {media.type === "video" ? t("admin.video") : t("admin.image")}
+                              </p>
+                              <p style={{ color: "#6B7280", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {media.url}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeMediaFromDraft(index)}
+                              className="p-2 rounded-lg"
+                              style={{ background: "rgba(239,68,68,0.1)" }}
+                            >
+                              <Trash2 size={14} color="#ef4444" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -550,4 +731,21 @@ export function AdminProducts() {
       </AnimatePresence>
     </div>
   );
+}
+
+function getEditableMedia(product: Product): ProductMedia[] {
+  if (product.media?.length) return product.media;
+  return product.images
+    .filter(Boolean)
+    .map((url, index) => ({
+      type: "image",
+      url,
+      thumbnailUrl: url,
+      alt: product.name,
+      sortOrder: (index + 1) * 10,
+    }));
+}
+
+function mimeFromVideoUrl(url: string) {
+  return url.toLowerCase().split("?")[0].endsWith(".webm") ? "video/webm" : "video/mp4";
 }

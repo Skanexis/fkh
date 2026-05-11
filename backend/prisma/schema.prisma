@@ -231,6 +231,7 @@ model Order {
   shippingInstructions     String?
   status                   OrderStatus @default(pending)
   subtotalAmount           Decimal     @db.Decimal(10, 2)
+  shippingAmount           Decimal     @default(0) @db.Decimal(10, 2)
   totalAmount              Decimal     @db.Decimal(10, 2)
   currency                 String      @default("EUR")
   customerComment          String?
@@ -295,6 +296,7 @@ model ShippingMethod {
   id        String   @id @default(uuid())
   code      String   @unique
   label     String
+  priceAmount Decimal @default(0) @db.Decimal(10, 2)
   isActive  Boolean  @default(true)
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())

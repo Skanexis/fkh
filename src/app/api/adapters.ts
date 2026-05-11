@@ -2,6 +2,19 @@ import { Product } from "../data/products";
 import { ApiOrder, ApiProduct } from "./types";
 
 export function toProduct(apiProduct: ApiProduct): Product {
+  const media = apiProduct.media.map((item) => ({
+    id: item.id,
+    type: item.type,
+    url: item.url,
+    thumbnailUrl: item.thumbnailUrl ?? null,
+    alt: item.alt ?? null,
+    sortOrder: item.sortOrder,
+  }));
+  const imagePreviews = media
+    .filter((item) => item.type === "image" || item.thumbnailUrl)
+    .map((item) => item.thumbnailUrl || item.url)
+    .filter(Boolean);
+
   return {
     id: apiProduct.id,
     slug: apiProduct.slug,
@@ -10,9 +23,8 @@ export function toProduct(apiProduct: ApiProduct): Product {
     category: apiProduct.category.name,
     description: apiProduct.description,
     longDescription: apiProduct.longDescription,
-    images: apiProduct.media.length
-      ? apiProduct.media.map((media) => media.thumbnailUrl || media.url)
-      : [""],
+    images: imagePreviews.length ? imagePreviews : [""],
+    media,
     priceTiers: apiProduct.priceTiers.map((tier) => ({
       id: tier.id,
       weight: tier.label,

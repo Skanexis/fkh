@@ -82,6 +82,7 @@ const siteSettingsPayload = z.object({
 const shippingMethodPayload = z.object({
   code: z.string().min(2).max(80).optional(),
   label: z.string().min(2).max(120),
+  priceAmount: z.number().nonnegative().default(0),
   isActive: z.boolean().default(true),
   sortOrder: z.number().int().default(0),
 });
@@ -464,6 +465,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       data: {
         code: body.data.code?.trim() || slugify(body.data.label),
         label: body.data.label,
+        priceAmount: body.data.priceAmount,
         isActive: body.data.isActive,
         sortOrder: body.data.sortOrder,
       },
@@ -483,6 +485,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       data: {
         ...(body.data.code !== undefined ? { code: body.data.code.trim() || slugify(body.data.label ?? id) } : {}),
         ...(body.data.label !== undefined ? { label: body.data.label } : {}),
+        ...(body.data.priceAmount !== undefined ? { priceAmount: body.data.priceAmount } : {}),
         ...(body.data.isActive !== undefined ? { isActive: body.data.isActive } : {}),
         ...(body.data.sortOrder !== undefined ? { sortOrder: body.data.sortOrder } : {}),
       },

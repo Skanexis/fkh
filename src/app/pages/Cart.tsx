@@ -51,6 +51,9 @@ export function Cart() {
   const [shippingForm, setShippingForm] = useState<ShippingForm>(initialShippingForm);
   const [shippingMethods, setShippingMethods] = useState<ApiShippingMethod[]>([]);
   const [selectedShippingMethodId, setSelectedShippingMethodId] = useState("");
+  const selectedShippingMethod = shippingMethods.find((method) => method.id === selectedShippingMethodId);
+  const shippingAmount = selectedShippingMethod?.priceAmount ?? 0;
+  const orderTotal = total + shippingAmount;
 
   useEffect(() => {
     let cancelled = false;
@@ -81,8 +84,7 @@ export function Cart() {
       return;
     }
 
-    const selectedShippingMethod = shippingMethods.find((method) => method.id === selectedShippingMethodId);
-    const validationError = validateShippingForm(shippingForm, selectedShippingMethod);
+    const validationError = validateShippingForm(shippingForm, selectedShippingMethod, t);
     if (validationError) {
       setCheckoutError(validationError);
       return;
@@ -279,35 +281,35 @@ export function Cart() {
             }}
           >
             <div className="mb-4">
-              <h2 style={{ color: "#FFFFFF", fontWeight: 800, fontSize: 18 }}>Dati di consegna</h2>
+              <h2 style={{ color: "#FFFFFF", fontWeight: 800, fontSize: 18 }}>{t("cart.shippingTitle")}</h2>
               <p style={{ color: "#A0A0A0", fontSize: 12, marginTop: 4, lineHeight: 1.45 }}>
-                Inserisci i dati completi per spedizioni internazionali con DHL, UPS, InPost o altri corrieri.
+                {t("cart.shippingSubtitle")}
               </p>
             </div>
 
             <div className="grid grid-cols-1 gap-3">
-              <ShippingInput label="Nome e cognome" required value={shippingForm.fullName} onChange={(value) => updateShipping("fullName", value)} />
-              <ShippingInput label="Azienda / Ragione sociale" value={shippingForm.company} onChange={(value) => updateShipping("company", value)} />
-              <ShippingInput label="Indirizzo" required value={shippingForm.addressLine1} onChange={(value) => updateShipping("addressLine1", value)} />
-              <ShippingInput label="Interno, scala, edificio" value={shippingForm.addressLine2} onChange={(value) => updateShipping("addressLine2", value)} />
+              <ShippingInput label={t("cart.fullName")} required value={shippingForm.fullName} onChange={(value) => updateShipping("fullName", value)} />
+              <ShippingInput label={t("cart.company")} value={shippingForm.company} onChange={(value) => updateShipping("company", value)} />
+              <ShippingInput label={t("cart.addressLine1")} required value={shippingForm.addressLine1} onChange={(value) => updateShipping("addressLine1", value)} />
+              <ShippingInput label={t("cart.addressLine2")} value={shippingForm.addressLine2} onChange={(value) => updateShipping("addressLine2", value)} />
 
               <div className="grid grid-cols-2 gap-3">
-                <ShippingInput label="Citta" required value={shippingForm.city} onChange={(value) => updateShipping("city", value)} />
-                <ShippingInput label="Provincia / Stato" value={shippingForm.region} onChange={(value) => updateShipping("region", value)} />
+                <ShippingInput label={t("cart.city")} required value={shippingForm.city} onChange={(value) => updateShipping("city", value)} />
+                <ShippingInput label={t("cart.region")} value={shippingForm.region} onChange={(value) => updateShipping("region", value)} />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <ShippingInput label="CAP / ZIP" required value={shippingForm.postalCode} onChange={(value) => updateShipping("postalCode", value)} />
-                <ShippingInput label="Paese" required value={shippingForm.country} onChange={(value) => updateShipping("country", value)} />
+                <ShippingInput label={t("cart.postalCode")} required value={shippingForm.postalCode} onChange={(value) => updateShipping("postalCode", value)} />
+                <ShippingInput label={t("cart.country")} required value={shippingForm.country} onChange={(value) => updateShipping("country", value)} />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <ShippingInput label="Telefono" required value={shippingForm.phone} onChange={(value) => updateShipping("phone", value)} />
-                <ShippingInput label="Email" type="email" value={shippingForm.email} onChange={(value) => updateShipping("email", value)} />
+                <ShippingInput label={t("cart.phone")} required value={shippingForm.phone} onChange={(value) => updateShipping("phone", value)} />
+                <ShippingInput label={t("cart.email")} type="email" value={shippingForm.email} onChange={(value) => updateShipping("email", value)} />
               </div>
 
               <label className="block">
-                <span style={{ color: "#A0A0A0", fontSize: 12, fontWeight: 600 }}>Corriere *</span>
+                <span style={{ color: "#A0A0A0", fontSize: 12, fontWeight: 600 }}>{t("cart.courier")} *</span>
                 <select
                   value={selectedShippingMethodId}
                   onChange={(event) => setSelectedShippingMethodId(event.target.value)}
@@ -320,20 +322,20 @@ export function Cart() {
                   }}
                 >
                   {shippingMethods.length === 0 ? (
-                    <option value="">Nessun corriere configurato</option>
+                    <option value="">{t("cart.noCouriers")}</option>
                   ) : (
                     shippingMethods.map((method) => (
                       <option key={method.id} value={method.id}>
-                        {method.label}
+                        {method.label} - {formatPrice(method.priceAmount, t)}
                       </option>
                     ))
                   )}
                 </select>
               </label>
-              <ShippingInput label="Locker / pickup point / parcel shop" value={shippingForm.pickupPoint} onChange={(value) => updateShipping("pickupPoint", value)} />
+              <ShippingInput label={t("cart.pickupPoint")} value={shippingForm.pickupPoint} onChange={(value) => updateShipping("pickupPoint", value)} />
 
               <label className="block">
-                <span style={{ color: "#A0A0A0", fontSize: 12, fontWeight: 600 }}>Note per la consegna</span>
+                <span style={{ color: "#A0A0A0", fontSize: 12, fontWeight: 600 }}>{t("cart.deliveryNotes")}</span>
                 <textarea
                   value={shippingForm.instructions}
                   onChange={(event) => updateShipping("instructions", event.target.value)}
@@ -378,7 +380,9 @@ export function Cart() {
           </div>
           <div className="flex justify-between items-center mb-2">
             <span style={{ color: "#A0A0A0", fontSize: 14 }}>{t("cart.shipping")}</span>
-            <span style={{ color: "#22c55e", fontWeight: 600, fontSize: 14 }}>{t("cart.free")}</span>
+            <span style={{ color: shippingAmount > 0 ? "#FFFFFF" : "#22c55e", fontWeight: 600, fontSize: 14 }}>
+              {selectedShippingMethod ? `${selectedShippingMethod.label} · ${formatPrice(shippingAmount, t)}` : t("cart.selectCourier")}
+            </span>
           </div>
           <div className="mt-3 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
             <div className="flex justify-between items-center">
@@ -390,7 +394,7 @@ export function Cart() {
                   fontSize: 22,
                 }}
               >
-                {total}€
+                {formatPrice(orderTotal, t)}
               </span>
             </div>
           </div>
@@ -428,7 +432,7 @@ export function Cart() {
             </>
           ) : (
             <>
-              {showShippingForm ? "Conferma ordine" : t("cart.checkout")} · {total}€
+              {showShippingForm ? t("cart.confirmOrder") : t("cart.checkout")} · {formatPrice(showShippingForm ? orderTotal : total, t)}
               <ArrowRight size={20} strokeWidth={2.5} />
             </>
           )}
@@ -477,25 +481,30 @@ function ShippingInput({
   );
 }
 
-function validateShippingForm(form: ShippingForm, shippingMethod?: ApiShippingMethod) {
+function validateShippingForm(
+  form: ShippingForm,
+  shippingMethod: ApiShippingMethod | undefined,
+  t: (key: string, values?: Record<string, string | number>) => string,
+) {
   const required: Array<[keyof ShippingForm, string]> = [
-    ["fullName", "Nome e cognome"],
-    ["addressLine1", "Indirizzo"],
-    ["city", "Citta"],
-    ["postalCode", "CAP / ZIP"],
-    ["country", "Paese"],
-    ["phone", "Telefono"],
+    ["fullName", t("cart.fullName")],
+    ["addressLine1", t("cart.addressLine1")],
+    ["city", t("cart.city")],
+    ["postalCode", t("cart.postalCode")],
+    ["country", t("cart.country")],
+    ["phone", t("cart.phone")],
   ];
 
   const missing = required.find(([field]) => !form[field].trim());
-  if (missing) return `Compila il campo: ${missing[1]}`;
-  if (!shippingMethod) return "Seleziona un corriere disponibile.";
-  if (form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim())) return "Inserisci una email valida.";
+  if (missing) return t("cart.requiredField", { field: missing[1] });
+  if (!shippingMethod) return t("cart.selectCourierError");
+  if (form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim())) return t("cart.invalidEmail");
   return null;
 }
 
 function toShippingPayload(form: ShippingForm, shippingMethod?: ApiShippingMethod) {
   return {
+    methodId: shippingMethod?.id,
     fullName: form.fullName.trim(),
     company: optionalString(form.company),
     addressLine1: form.addressLine1.trim(),
@@ -506,10 +515,13 @@ function toShippingPayload(form: ShippingForm, shippingMethod?: ApiShippingMetho
     country: form.country.trim(),
     phone: form.phone.trim(),
     email: optionalString(form.email),
-    methodPreference: shippingMethod?.label,
     pickupPoint: optionalString(form.pickupPoint),
     instructions: optionalString(form.instructions),
   };
+}
+
+function formatPrice(amount: number, t: (key: string) => string) {
+  return amount > 0 ? `${amount}€` : t("cart.free");
 }
 
 function optionalString(value: string) {
