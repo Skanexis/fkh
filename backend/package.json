@@ -10,7 +10,7 @@
     "prisma:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "node dist/prisma/seed.js"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.2",
@@ -30,6 +30,6 @@
     "typescript": "^5.7.3"
   },
   "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "seed": "node dist/prisma/seed.js"
   }
 }
