@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { AlertCircle, ShoppingCart, Trash2, Minus, Plus, ArrowRight, Package } from "lucide-react";
 import { useCart } from "../store/cart-context";
@@ -7,7 +7,7 @@ import { useNavigate } from "react-router";
 import { useAuth } from "../auth/auth-context";
 import { TelegramLoginPanel } from "../auth/TelegramLoginPanel";
 import { apiRequest } from "../api/client";
-import { ApiOrder } from "../api/types";
+import { ApiOrder, ApiShippingMethod } from "../api/types";
 import { useI18n } from "../i18n";
 
 interface ShippingForm {
@@ -19,11 +19,8 @@ interface ShippingForm {
   region: string;
   postalCode: string;
   country: string;
-  countryCode: string;
   phone: string;
   email: string;
-  taxId: string;
-  methodPreference: string;
   pickupPoint: string;
   instructions: string;
 }
@@ -37,11 +34,8 @@ const initialShippingForm: ShippingForm = {
   region: "",
   postalCode: "",
   country: "",
-  countryCode: "",
   phone: "",
   email: "",
-  taxId: "",
-  methodPreference: "DHL / UPS / InPost - best available",
   pickupPoint: "",
   instructions: "",
 };
@@ -55,6 +49,24 @@ export function Cart() {
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [showShippingForm, setShowShippingForm] = useState(false);
   const [shippingForm, setShippingForm] = useState<ShippingForm>(initialShippingForm);
+  const [shippingMethods, setShippingMethods] = useState<ApiShippingMethod[]>([]);
+  const [selectedShippingMethodId, setSelectedShippingMethodId] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    apiRequest<ApiShippingMethod[]>("/api/v1/shipping-methods")
+      .then((methods) => {
+        if (cancelled) return;
+        setShippingMethods(methods);
+        setSelectedShippingMethodId((current) => current || methods[0]?.id || "");
+      })
+      .catch(() => {
+        if (!cancelled) setShippingMethods([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleCheckout() {
     setCheckoutError(null);
@@ -69,7 +81,8 @@ export function Cart() {
       return;
     }
 
-    const validationError = validateShippingForm(shippingForm);
+    const selectedShippingMethod = shippingMethods.find((method) => method.id === selectedShippingMethodId);
+    const validationError = validateShippingForm(shippingForm, selectedShippingMethod);
     if (validationError) {
       setCheckoutError(validationError);
       return;
@@ -80,7 +93,7 @@ export function Cart() {
       await apiRequest<ApiOrder>("/api/v1/orders", {
         method: "POST",
         body: JSON.stringify({
-          shipping: toShippingPayload(shippingForm),
+          shipping: toShippingPayload(shippingForm, selectedShippingMethod),
           items: items.map((item) => ({
             productId: item.product.id,
             priceTierId: item.tier.id,
@@ -285,18 +298,38 @@ export function Cart() {
 
               <div className="grid grid-cols-2 gap-3">
                 <ShippingInput label="CAP / ZIP" required value={shippingForm.postalCode} onChange={(value) => updateShipping("postalCode", value)} />
-                <ShippingInput label="Codice paese" required value={shippingForm.countryCode} onChange={(value) => updateShipping("countryCode", value.toUpperCase().slice(0, 2))} />
+                <ShippingInput label="Paese" required value={shippingForm.country} onChange={(value) => updateShipping("country", value)} />
               </div>
-
-              <ShippingInput label="Paese" required value={shippingForm.country} onChange={(value) => updateShipping("country", value)} />
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <ShippingInput label="Telefono" required value={shippingForm.phone} onChange={(value) => updateShipping("phone", value)} />
                 <ShippingInput label="Email" type="email" value={shippingForm.email} onChange={(value) => updateShipping("email", value)} />
               </div>
 
-              <ShippingInput label="VAT / Tax ID / EORI" value={shippingForm.taxId} onChange={(value) => updateShipping("taxId", value)} />
-              <ShippingInput label="Corriere preferito" value={shippingForm.methodPreference} onChange={(value) => updateShipping("methodPreference", value)} />
+              <label className="block">
+                <span style={{ color: "#A0A0A0", fontSize: 12, fontWeight: 600 }}>Corriere *</span>
+                <select
+                  value={selectedShippingMethodId}
+                  onChange={(event) => setSelectedShippingMethodId(event.target.value)}
+                  className="mt-1 w-full rounded-xl px-3 py-2 outline-none"
+                  style={{
+                    background: "rgba(255,255,255,0.06)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    color: "#FFFFFF",
+                    fontSize: 14,
+                  }}
+                >
+                  {shippingMethods.length === 0 ? (
+                    <option value="">Nessun corriere configurato</option>
+                  ) : (
+                    shippingMethods.map((method) => (
+                      <option key={method.id} value={method.id}>
+                        {method.label}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </label>
               <ShippingInput label="Locker / pickup point / parcel shop" value={shippingForm.pickupPoint} onChange={(value) => updateShipping("pickupPoint", value)} />
 
               <label className="block">
@@ -365,10 +398,7 @@ export function Cart() {
       </div>
 
       {/* Sticky checkout button */}
-      <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
+      <div
         className="fkh-cart-checkout fixed left-0 right-0 z-40 px-5 pb-3 pt-4"
         style={{
           background: "linear-gradient(to top, #0B0B0C 80%, transparent)",
@@ -403,7 +433,7 @@ export function Cart() {
             </>
           )}
         </motion.button>
-      </motion.div>
+      </div>
     </div>
   );
 
@@ -447,25 +477,24 @@ function ShippingInput({
   );
 }
 
-function validateShippingForm(form: ShippingForm) {
+function validateShippingForm(form: ShippingForm, shippingMethod?: ApiShippingMethod) {
   const required: Array<[keyof ShippingForm, string]> = [
     ["fullName", "Nome e cognome"],
     ["addressLine1", "Indirizzo"],
     ["city", "Citta"],
     ["postalCode", "CAP / ZIP"],
     ["country", "Paese"],
-    ["countryCode", "Codice paese"],
     ["phone", "Telefono"],
   ];
 
   const missing = required.find(([field]) => !form[field].trim());
   if (missing) return `Compila il campo: ${missing[1]}`;
-  if (form.countryCode.trim().length !== 2) return "Il codice paese deve avere 2 lettere, es. IT, DE, US.";
+  if (!shippingMethod) return "Seleziona un corriere disponibile.";
   if (form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim())) return "Inserisci una email valida.";
   return null;
 }
 
-function toShippingPayload(form: ShippingForm) {
+function toShippingPayload(form: ShippingForm, shippingMethod?: ApiShippingMethod) {
   return {
     fullName: form.fullName.trim(),
     company: optionalString(form.company),
@@ -475,11 +504,9 @@ function toShippingPayload(form: ShippingForm) {
     region: optionalString(form.region),
     postalCode: form.postalCode.trim(),
     country: form.country.trim(),
-    countryCode: form.countryCode.trim().toUpperCase(),
     phone: form.phone.trim(),
     email: optionalString(form.email),
-    taxId: optionalString(form.taxId),
-    methodPreference: optionalString(form.methodPreference),
+    methodPreference: shippingMethod?.label,
     pickupPoint: optionalString(form.pickupPoint),
     instructions: optionalString(form.instructions),
   };
