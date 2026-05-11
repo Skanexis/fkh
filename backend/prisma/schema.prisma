@@ -72,6 +72,7 @@ model User {
   authRequests         TelegramAuthRequest[]
   sessions             UserSession[]
   orders               Order[]
+  productReviews       ProductReview[]
   auditLogs            AuditLog[]            @relation("AuditActor")
 
   @@index([role])
@@ -145,6 +146,7 @@ model Product {
   media           ProductMedia[]
   priceTiers      ProductPriceTier[]
   orderItems      OrderItem[]
+  reviews         ProductReview[]
 
   @@index([status])
   @@index([categoryId])
@@ -271,6 +273,23 @@ model OrderItem {
 
   @@index([orderId])
   @@index([productId])
+}
+
+model ProductReview {
+  id        String   @id @default(uuid())
+  productId String
+  userId    String
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, userId])
+  @@index([productId])
+  @@index([userId])
+  @@index([createdAt])
 }
 
 model Contact {

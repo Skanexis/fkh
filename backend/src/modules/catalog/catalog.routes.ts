@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import { ProductStatus } from "@prisma/client";
+import { OrderStatus, ProductStatus } from "@prisma/client";
 import { z } from "zod";
+import { requireActiveUser } from "../../common/auth.js";
 import { badRequest, notFound } from "../../common/http-error.js";
 import { pageMeta, money } from "../../common/serialize.js";
 import { prisma } from "../../db/prisma.js";
@@ -21,6 +22,12 @@ const productListQuery = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(50).default(20),
   sort: z.enum(["newest", "popular", "price_asc", "price_desc"]).default("newest"),
+});
+
+const productParams = z.object({ slug: z.string().min(1) });
+const reviewPayload = z.object({
+  rating: z.number().int().min(1).max(5),
+  comment: z.string().max(1000).optional(),
 });
 
 export async function registerCatalogRoutes(app: FastifyInstance) {
@@ -69,7 +76,8 @@ export async function registerCatalogRoutes(app: FastifyInstance) {
       }),
     ]);
 
-    const serialized = products.map(serializeProduct);
+    const summaries = await getReviewSummaries(products.map((product) => product.id));
+    const serialized = products.map((product) => serializeProduct(product, summaries.get(product.id)));
     const sorted =
       sort === "price_asc" || sort === "price_desc"
         ? serialized.sort((a, b) => {
@@ -83,7 +91,7 @@ export async function registerCatalogRoutes(app: FastifyInstance) {
   });
 
   app.get("/api/v1/products/:slug", async (request) => {
-    const params = z.object({ slug: z.string().min(1) }).safeParse(request.params);
+    const params = productParams.safeParse(request.params);
     if (!params.success) throw badRequest("Invalid product slug", params.error.flatten());
 
     const product = await prisma.product.findFirst({
@@ -103,7 +111,77 @@ export async function registerCatalogRoutes(app: FastifyInstance) {
       include: productInclude,
     });
 
-    return { data: { ...serializeProduct(product), relatedProducts: related.map(serializeProduct) } };
+    const summaries = await getReviewSummaries([product.id, ...related.map((item) => item.id)]);
+
+    return {
+      data: {
+        ...serializeProduct(product, summaries.get(product.id)),
+        relatedProducts: related.map((item) => serializeProduct(item, summaries.get(item.id))),
+      },
+    };
+  });
+
+  app.get("/api/v1/products/:slug/reviews", async (request) => {
+    const params = productParams.safeParse(request.params);
+    if (!params.success) throw badRequest("Invalid product slug", params.error.flatten());
+
+    const product = await prisma.product.findFirst({
+      where: { slug: params.data.slug, status: ProductStatus.active },
+      select: { id: true },
+    });
+    if (!product) throw notFound("Product not found");
+
+    const reviews = await prisma.productReview.findMany({
+      where: { productId: product.id },
+      orderBy: { createdAt: "desc" },
+      include: { user: { select: { name: true, telegramUsername: true, avatarUrl: true } } },
+      take: 100,
+    });
+
+    return { data: reviews.map(serializeProductReview) };
+  });
+
+  app.post("/api/v1/products/:slug/reviews", async (request) => {
+    const user = await requireActiveUser(request);
+    const params = productParams.safeParse(request.params);
+    if (!params.success) throw badRequest("Invalid product slug", params.error.flatten());
+    const body = reviewPayload.safeParse(request.body);
+    if (!body.success) throw badRequest("Invalid review payload", body.error.flatten());
+
+    const product = await prisma.product.findFirst({
+      where: { slug: params.data.slug, status: ProductStatus.active },
+      select: { id: true },
+    });
+    if (!product) throw notFound("Product not found");
+
+    const ordered = await prisma.orderItem.findFirst({
+      where: {
+        productId: product.id,
+        order: {
+          userId: user.id,
+          status: { in: [OrderStatus.accepted, OrderStatus.completed] },
+        },
+      },
+      select: { id: true },
+    });
+    if (!ordered) throw badRequest("Only customers who ordered this product can review it");
+
+    const review = await prisma.productReview.upsert({
+      where: { productId_userId: { productId: product.id, userId: user.id } },
+      update: {
+        rating: body.data.rating,
+        comment: cleanOptional(body.data.comment),
+      },
+      create: {
+        productId: product.id,
+        userId: user.id,
+        rating: body.data.rating,
+        comment: cleanOptional(body.data.comment),
+      },
+      include: { user: { select: { name: true, telegramUsername: true, avatarUrl: true } } },
+    });
+
+    return { data: serializeProductReview(review) };
   });
 
   app.get("/api/v1/contacts", async () => {
@@ -138,7 +216,12 @@ const productInclude = {
   priceTiers: { where: { isActive: true }, orderBy: { sortOrder: "asc" as const } },
 };
 
-export function serializeProduct(product: any) {
+interface ReviewSummary {
+  rating: number;
+  reviewsCount: number;
+}
+
+export function serializeProduct(product: any, reviewSummary?: ReviewSummary) {
   return {
     id: product.id,
     slug: product.slug,
@@ -149,8 +232,8 @@ export function serializeProduct(product: any) {
     longDescription: product.longDescription,
     badge: product.badge,
     featured: product.featured,
-    rating: product.rating === null ? null : money(product.rating),
-    reviewsCount: product.reviewsCount,
+    rating: reviewSummary ? reviewSummary.rating : 0,
+    reviewsCount: reviewSummary ? reviewSummary.reviewsCount : 0,
     media: product.media.map((media: any) => ({
       id: media.id,
       type: media.type,
@@ -167,6 +250,42 @@ export function serializeProduct(product: any) {
       sortOrder: tier.sortOrder,
     })),
   };
+}
+
+async function getReviewSummaries(productIds: string[]) {
+  if (!productIds.length) return new Map<string, ReviewSummary>();
+  const grouped = await prisma.productReview.groupBy({
+    by: ["productId"],
+    where: { productId: { in: productIds } },
+    _avg: { rating: true },
+    _count: { id: true },
+  });
+  return new Map(grouped.map((item) => [
+    item.productId,
+    {
+      rating: Math.round((item._avg.rating ?? 0) * 10) / 10,
+      reviewsCount: item._count.id,
+    },
+  ]));
+}
+
+function serializeProductReview(review: any) {
+  return {
+    id: review.id,
+    rating: review.rating,
+    comment: review.comment,
+    createdAt: review.createdAt.toISOString(),
+    user: {
+      name: review.user?.name ?? "Customer",
+      username: review.user?.telegramUsername ?? null,
+      avatarUrl: review.user?.avatarUrl ?? null,
+    },
+  };
+}
+
+function cleanOptional(value?: string | null) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
 }
 
 export function serializeSiteSettings(settings: any) {

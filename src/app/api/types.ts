@@ -39,6 +39,18 @@ export interface ApiProduct {
   relatedProducts?: ApiProduct[];
 }
 
+export interface ApiProductReview {
+  id: string;
+  rating: number;
+  comment?: string | null;
+  createdAt: string;
+  user: {
+    name: string;
+    username?: string | null;
+    avatarUrl?: string | null;
+  };
+}
+
 export interface ApiUser {
   id: string;
   name: string;

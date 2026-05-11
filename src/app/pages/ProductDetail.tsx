@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
-import { AlertCircle, Star, ShoppingCart, ChevronLeft, ChevronRight, Minus, Plus, Check } from "lucide-react";
+import { AlertCircle, Star, ShoppingCart, ChevronLeft, ChevronRight, Minus, Plus, Check, Send } from "lucide-react";
 import { Product, ProductMedia } from "../data/products";
 import { useCart } from "../store/cart-context";
 import { TopBar } from "../components/TopBar";
 import { ProductMediaPlayer } from "../components/ProductMediaPlayer";
+import { useAuth } from "../auth/auth-context";
 import { apiRequest } from "../api/client";
-import { ApiProduct } from "../api/types";
+import { ApiProduct, ApiProductReview } from "../api/types";
 import { toProduct } from "../api/adapters";
 import { useI18n } from "../i18n";
 
@@ -15,8 +16,10 @@ export function ProductDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addItem } = useCart();
+  const { isAuthenticated } = useAuth();
   const { t } = useI18n();
   const [product, setProduct] = useState<Product | null>(null);
+  const [reviews, setReviews] = useState<ApiProductReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,6 +27,10 @@ export function ProductDetail() {
   const [selectedTierIdx, setSelectedTierIdx] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewSaving, setReviewSaving] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,8 +40,14 @@ export function ProductDetail() {
       setLoading(true);
       setError(null);
       try {
-        const apiProduct = await apiRequest<ApiProduct>(`/api/v1/products/${id}`);
-        if (!cancelled) setProduct(toProduct(apiProduct));
+        const [apiProduct, apiReviews] = await Promise.all([
+          apiRequest<ApiProduct>(`/api/v1/products/${id}`),
+          apiRequest<ApiProductReview[]>(`/api/v1/products/${id}/reviews`),
+        ]);
+        if (!cancelled) {
+          setProduct(toProduct(apiProduct));
+          setReviews(apiReviews);
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : t("product.notFound"));
       } finally {
@@ -79,6 +92,34 @@ export function ProductDetail() {
     setTimeout(() => setAdded(false), 1500);
   }
 
+  async function handleReviewSubmit() {
+    if (!id) return;
+    setReviewSaving(true);
+    setReviewError(null);
+    try {
+      const saved = await apiRequest<ApiProductReview>(`/api/v1/products/${id}/reviews`, {
+        method: "POST",
+        body: JSON.stringify({
+          rating: reviewRating,
+          comment: reviewComment.trim() || undefined,
+        }),
+      });
+      const nextReviews = [saved, ...reviews.filter((review) => review.id !== saved.id)];
+      setReviews(nextReviews);
+      setProduct((current) => current ? {
+        ...current,
+        rating: Math.round((nextReviews.reduce((sum, review) => sum + review.rating, 0) / nextReviews.length) * 10) / 10,
+        reviews: nextReviews.length,
+      } : current);
+      setReviewComment("");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      setReviewError(message.includes("Only customers") ? t("product.reviewOrderRequired") : message || t("product.reviewOrderRequired"));
+    } finally {
+      setReviewSaving(false);
+    }
+  }
+
   const BADGE_COLORS: Record<string, string> = {
     "Best Seller": "#FF4D6D",
     Gold: "#FF9A8B",
@@ -88,7 +129,7 @@ export function ProductDetail() {
 
   return (
     <div
-      className="min-h-screen pb-32 relative"
+      className="min-h-screen relative"
       style={{ background: "#0B0B0C", fontFamily: "Inter, sans-serif" }}
     >
       {/* Image Gallery */}
@@ -198,7 +239,7 @@ export function ProductDetail() {
       </div>
 
       {/* Content */}
-      <div className="px-5 pt-5">
+      <div className="px-5 pt-5" style={{ paddingBottom: "calc(170px + env(safe-area-inset-bottom, 0px))" }}>
         {/* Name and rating */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -323,6 +364,100 @@ export function ProductDetail() {
             <span style={{ color: "#FF4D6D", fontWeight: 700 }}>{totalPrice}€</span>
           </span>
         </motion.div>
+
+        {/* Divider */}
+        <div className="my-4" style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
+
+        {/* Reviews */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+        >
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <h3 style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 16 }}>
+              {t("product.customerReviews")}
+            </h3>
+            <span style={{ color: "#A0A0A0", fontSize: 12 }}>
+              {reviews.length} {t("product.reviews")}
+            </span>
+          </div>
+
+          <div className="rounded-2xl p-4 mb-3" style={{ background: "#1A1A1D", border: "1px solid rgba(255,255,255,0.06)" }}>
+            {isAuthenticated ? (
+              <>
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <span style={{ color: "#A0A0A0", fontSize: 13, fontWeight: 600 }}>{t("product.yourReview")}</span>
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((value) => (
+                      <button key={value} type="button" onClick={() => setReviewRating(value)}>
+                        <Star size={20} fill={value <= reviewRating ? "#FF4D6D" : "transparent"} color="#FF4D6D" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <textarea
+                  value={reviewComment}
+                  onChange={(event) => setReviewComment(event.target.value)}
+                  rows={3}
+                  placeholder={t("product.reviewPlaceholder")}
+                  className="w-full rounded-xl px-3 py-2 outline-none resize-none"
+                  style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", color: "#FFFFFF", fontSize: 14 }}
+                />
+                {reviewError && (
+                  <p style={{ color: "#ef4444", fontSize: 12, lineHeight: 1.45, marginTop: 8 }}>{reviewError}</p>
+                )}
+                <button
+                  type="button"
+                  disabled={reviewSaving}
+                  onClick={() => void handleReviewSubmit()}
+                  className="mt-3 w-full rounded-xl py-3 flex items-center justify-center gap-2"
+                  style={{
+                    background: "rgba(255,77,109,0.14)",
+                    border: "1px solid rgba(255,77,109,0.28)",
+                    color: "#FF4D6D",
+                    fontWeight: 800,
+                    opacity: reviewSaving ? 0.65 : 1,
+                  }}
+                >
+                  <Send size={15} />
+                  {reviewSaving ? t("admin.saving") : t("product.submitReview")}
+                </button>
+              </>
+            ) : (
+              <p style={{ color: "#A0A0A0", fontSize: 13, lineHeight: 1.55 }}>
+                {t("product.loginToReview")}
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-3">
+            {reviews.length === 0 ? (
+              <p style={{ color: "#A0A0A0", fontSize: 13 }}>{t("product.noReviews")}</p>
+            ) : (
+              reviews.map((review) => (
+                <div key={review.id} className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 13, overflowWrap: "anywhere" }}>
+                        {review.user.name}
+                      </p>
+                      <p style={{ color: "#6B7280", fontSize: 11 }}>{new Date(review.createdAt).toLocaleDateString()}</p>
+                    </div>
+                    <div className="flex items-center gap-0.5">
+                      {[1, 2, 3, 4, 5].map((value) => (
+                        <Star key={value} size={13} fill={value <= review.rating ? "#FF4D6D" : "transparent"} color="#FF4D6D" />
+                      ))}
+                    </div>
+                  </div>
+                  {review.comment && (
+                    <p style={{ color: "#A0A0A0", fontSize: 13, lineHeight: 1.55, marginTop: 10 }}>{review.comment}</p>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </motion.div>
       </div>
 
       {/* Sticky bottom CTA */}
@@ -330,8 +465,9 @@ export function ProductDetail() {
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
-        className="fixed bottom-0 left-0 right-0 px-5 pb-6 pt-4"
+        className="fixed left-0 right-0 z-40 px-5 pb-3 pt-4"
         style={{
+          bottom: "calc(62px + env(safe-area-inset-bottom, 0px))",
           background: "linear-gradient(to top, #0B0B0C 80%, transparent)",
         }}
       >

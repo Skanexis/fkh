@@ -157,7 +157,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       }),
     ]);
 
-    return { data: products.map(serializeProduct), meta: pageMeta(query.data.page, query.data.limit, total) };
+    return { data: products.map((product) => serializeProduct(product)), meta: pageMeta(query.data.page, query.data.limit, total) };
   });
 
   app.post("/api/v1/admin/products", async (request) => {
