@@ -461,17 +461,16 @@ export function ProductDetail() {
       </div>
 
       {/* Sticky bottom CTA */}
-      <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="fixed left-0 right-0 z-40 px-5 pb-3 pt-4"
+      <div
+        className="fkh-product-detail-cta fixed left-0 right-0 z-40 px-5 pb-3 pt-4"
         style={{
-          bottom: "calc(62px + env(safe-area-inset-bottom, 0px))",
           background: "linear-gradient(to top, #0B0B0C 80%, transparent)",
         }}
       >
         <motion.button
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.97 }}
           onClick={handleAdd}
@@ -500,7 +499,7 @@ export function ProductDetail() {
             </>
           )}
         </motion.button>
-      </motion.div>
+      </div>
     </div>
   );
 }

@@ -209,6 +209,14 @@ body {
   transform: translateX(-50%);
 }
 
+.fkh-product-detail-cta {
+  bottom: calc(var(--fkh-shell-edge) + 70px + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  right: auto;
+  width: var(--fkh-shell-width);
+  transform: translateX(-50%);
+}
+
 .fkh-frame-corner {
   position: fixed;
   z-index: 80;
