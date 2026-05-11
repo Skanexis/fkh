@@ -3,153 +3,352 @@ import { PrismaClient, ProductStatus, ContactType, MediaType, UserRole } from "@
 const prisma = new PrismaClient();
 
 const categories = [
-  { slug: "premium", name: "Premium", sortOrder: 10 },
-  { slug: "gold", name: "Gold", sortOrder: 20 },
-  { slug: "limited", name: "Limited", sortOrder: 30 },
-  { slug: "new", name: "New", sortOrder: 40 },
-  { slug: "classic", name: "Classic", sortOrder: 50 },
+  { slug: "drysift", name: "Drysift", sortOrder: 10, isActive: true },
+  { slug: "frozen", name: "Frozen", sortOrder: 20, isActive: true },
+  { slug: "static", name: "Static", sortOrder: 30, isActive: true },
+  { slug: "usa", name: "USA", sortOrder: 40, isActive: true },
+  { slug: "cali", name: "Cali", sortOrder: 50, isActive: true },
+  { slug: "vapes", name: "Vapes", sortOrder: 60, isActive: true },
 ];
 
 const products = [
   {
-    slug: "nero-assoluto",
-    name: "Nero Assoluto",
+    slug: "drysift-premium",
+    name: "DRYSIFT PREMIUM",
     brand: "F.K.H",
-    category: "premium",
-    description: "Extract premium di alta qualita",
+    category: "drysift",
+    description: "Premium Moroccan drysift selection.",
     longDescription:
-      "Nero Assoluto e il nostro estratto di punta, ottenuto attraverso un processo di estrazione a freddo che preserva tutti gli aromi e i principi attivi. Una scelta di lusso per i palati piu esigenti.",
+      "DRYSIFT PREMIUM from Morocco. Shipping worldwide from Barcelona. Tracking available in 24h.",
     images: [
-      "https://images.unsplash.com/photo-1613031876173-da7407c43fff?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-      "https://images.unsplash.com/photo-1758903846707-7e34aa99175c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
+      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
     ],
     priceTiers: [
-      { label: "1g", amount: 10 },
-      { label: "2g", amount: 18 },
-      { label: "3g", amount: 25 },
-      { label: "5g", amount: 40 },
+      { label: "100g", amount: 350 },
+      { label: "500g", amount: 1300 },
+      { label: "1kg", amount: 2500 },
     ],
-    badge: "Best Seller",
+    badge: "Morocco",
     featured: true,
     rating: 4.9,
-    reviewsCount: 128,
+    reviewsCount: 40,
   },
   {
-    slug: "oro-puro",
-    name: "Oro Puro",
+    slug: "fkh120-2k25",
+    name: "FKH120 2K25",
     brand: "F.K.H",
-    category: "gold",
-    description: "Riserva speciale dorata",
+    category: "drysift",
+    description: "FKH120 2K25 premium batch.",
     longDescription:
-      "Oro Puro rappresenta il culmine della nostra arte estrattiva. Una riserva speciale con note calde e avvolgenti, dal colore ambrato intenso.",
+      "FKH120 2K25 premium batch. Shipping worldwide from Barcelona. Tracking available in 24h.",
     images: [
-      "https://images.unsplash.com/photo-1737920459846-2d0318700658?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-      "https://images.unsplash.com/photo-1749497636434-82e53b6358b2?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
+      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
     ],
     priceTiers: [
-      { label: "1g", amount: 15 },
-      { label: "2g", amount: 28 },
-      { label: "3g", amount: 38 },
-      { label: "5g", amount: 60 },
+      { label: "100g", amount: 350 },
+      { label: "500g", amount: 1300 },
+      { label: "1kg", amount: 2400 },
     ],
-    badge: "Gold",
+    badge: "2K25",
     featured: true,
     rating: 4.8,
-    reviewsCount: 95,
+    reviewsCount: 36,
   },
   {
-    slug: "cristallo-verde",
-    name: "Cristallo Verde",
+    slug: "fkh120-2k26",
+    name: "FKH120 2K26",
     brand: "F.K.H",
-    category: "new",
-    description: "Selezione primaverile esclusiva",
+    category: "drysift",
+    description: "FKH120 2K26 premium batch.",
     longDescription:
-      "Cristallo Verde e una selezione stagionale di rara freschezza. Il processo di raccolta manuale garantisce un prodotto di eccezionale purezza.",
+      "FKH120 2K26 premium batch. Shipping worldwide from Barcelona. Tracking available in 24h.",
     images: [
-      "https://images.unsplash.com/photo-1567797005083-7b88aee866b7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-      "https://images.unsplash.com/photo-1599989687563-8d28144a3cc4?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
+      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
     ],
     priceTiers: [
-      { label: "1g", amount: 12 },
-      { label: "2g", amount: 22 },
-      { label: "3g", amount: 30 },
-      { label: "5g", amount: 48 },
+      { label: "100g", amount: 350 },
+      { label: "500g", amount: 1350 },
+      { label: "1kg", amount: 2500 },
     ],
-    badge: "New",
-    featured: false,
-    rating: 4.7,
-    reviewsCount: 42,
-  },
-  {
-    slug: "perla-nera",
-    name: "Perla Nera",
-    brand: "F.K.H",
-    category: "limited",
-    description: "Edizione limitata esclusiva",
-    longDescription:
-      "Perla Nera e una produzione limitatissima, disponibile solo in quantita ristrette. Un'esperienza sensoriale unica e irripetibile per i veri intenditori.",
-    images: [
-      "https://images.unsplash.com/photo-1733138187329-1663b79464b3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-      "https://images.unsplash.com/photo-1679139350905-883f2fa05101?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-    ],
-    priceTiers: [
-      { label: "1g", amount: 20 },
-      { label: "2g", amount: 38 },
-      { label: "3g", amount: 54 },
-    ],
-    badge: "Limited",
+    badge: "2K26",
     featured: true,
-    rating: 5.0,
+    rating: 4.9,
+    reviewsCount: 38,
+  },
+  {
+    slug: "la-commissione-frozen-105u",
+    name: "LA COMMISSIONE",
+    brand: "F.K.H",
+    category: "frozen",
+    description: "Frozen 105u selection.",
+    longDescription:
+      "LA COMMISSIONE Frozen 105u. Shipping worldwide from Barcelona. Tracking available in 24h.",
+    images: [
+      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
+    ],
+    priceTiers: [
+      { label: "50g", amount: 250 },
+      { label: "100g", amount: 450 },
+      { label: "1kg", amount: 3800 },
+    ],
+    badge: "Frozen 105u",
+    featured: true,
+    rating: 4.8,
+    reviewsCount: 31,
+  },
+  {
+    slug: "eggs-frozen-90u",
+    name: "EGGS FROZEN 90u",
+    brand: "F.K.H",
+    category: "frozen",
+    description: "Moroccan Eggs Frozen 90u.",
+    longDescription:
+      "EGGS FROZEN 90u from Morocco. Shipping worldwide from Barcelona. Tracking available in 24h.",
+    images: [
+      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
+    ],
+    priceTiers: [
+      { label: "50g", amount: 250 },
+      { label: "100g", amount: 450 },
+      { label: "1kg", amount: 4000 },
+    ],
+    badge: "Morocco",
+    featured: true,
+    rating: 4.8,
+    reviewsCount: 28,
+  },
+  {
+    slug: "frozen-premium",
+    name: "FROZEN PREMIUM",
+    brand: "F.K.H",
+    category: "frozen",
+    description: "Premium Moroccan frozen selection.",
+    longDescription:
+      "FROZEN PREMIUM from Morocco. Shipping worldwide from Barcelona. Tracking available in 24h.",
+    images: [
+      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
+    ],
+    priceTiers: [
+      { label: "50g", amount: 350 },
+      { label: "100g", amount: 650 },
+      { label: "1kg", amount: 6000 },
+    ],
+    badge: "Premium",
+    featured: true,
+    rating: 4.9,
+    reviewsCount: 34,
+  },
+  {
+    slug: "static-super-roocks",
+    name: "STATIC SUPER ROOCKS",
+    brand: "F.K.H",
+    category: "static",
+    description: "Moroccan static super roocks.",
+    longDescription:
+      "STATIC SUPER ROOCKS from Morocco. Shipping worldwide from Barcelona. Tracking available in 24h.",
+    images: [
+      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
+    ],
+    priceTiers: [
+      { label: "50g", amount: 350 },
+      { label: "100g", amount: 650 },
+      { label: "1kg", amount: 6000 },
+    ],
+    badge: "Static",
+    featured: true,
+    rating: 4.9,
+    reviewsCount: 26,
+  },
+  {
+    slug: "static-90u",
+    name: "STATIC 90u",
+    brand: "F.K.H",
+    category: "static",
+    description: "Moroccan static 90u selection.",
+    longDescription:
+      "STATIC 90u from Morocco. Shipping worldwide from Barcelona. Tracking available in 24h.",
+    images: [
+      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
+    ],
+    priceTiers: [
+      { label: "50g", amount: 400 },
+      { label: "100g", amount: 700 },
+      { label: "1kg", amount: 6200 },
+    ],
+    badge: "Static 90u",
+    featured: true,
+    rating: 4.9,
+    reviewsCount: 24,
+  },
+  {
+    slug: "static-73u",
+    name: "STATIC 73u",
+    brand: "F.K.H",
+    category: "static",
+    description: "Moroccan static 73u selection.",
+    longDescription:
+      "STATIC 73u from Morocco. Shipping worldwide from Barcelona. Tracking available in 24h.",
+    images: [
+      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
+    ],
+    priceTiers: [
+      { label: "50g", amount: 450 },
+      { label: "100g", amount: 750 },
+      { label: "1kg", amount: 6500 },
+    ],
+    badge: "Static 73u",
+    featured: true,
+    rating: 4.9,
+    reviewsCount: 23,
+  },
+  {
+    slug: "drysift-usa",
+    name: "DRYSIFT USA",
+    brand: "F.K.H",
+    category: "usa",
+    description: "USA drysift selection.",
+    longDescription:
+      "DRYSIFT USA selection. Shipping worldwide from Barcelona. Tracking available in 24h.",
+    images: [
+      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
+    ],
+    priceTiers: [
+      { label: "100g", amount: 1000 },
+      { label: "1kg", amount: 8500 },
+    ],
+    badge: "USA",
+    featured: false,
+    rating: 4.8,
+    reviewsCount: 18,
+  },
+  {
+    slug: "waterhash-siftedgold",
+    name: "WATERHASH SIFTEDGOLD",
+    brand: "F.K.H",
+    category: "usa",
+    description: "USA Waterhash Siftedgold.",
+    longDescription:
+      "WATERHASH SIFTEDGOLD USA. Shipping worldwide from Barcelona. Tracking available in 24h.",
+    images: [
+      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
+    ],
+    priceTiers: [
+      { label: "100g", amount: 1000 },
+      { label: "1kg", amount: 8500 },
+    ],
+    badge: "USA",
+    featured: false,
+    rating: 4.8,
     reviewsCount: 17,
   },
   {
-    slug: "ambra-classica",
-    name: "Ambra Classica",
+    slug: "siftedgold-static-usa",
+    name: "SIFTEDGOLD STATIC USA",
     brand: "F.K.H",
-    category: "classic",
-    description: "La nostra ricetta originale",
+    category: "usa",
+    description: "Siftedgold Static USA.",
     longDescription:
-      "Ambra Classica e il prodotto storico di F.K.H, la ricetta originale che ha reso famoso il nostro marchio. Equilibrata, raffinata e sempre affidabile.",
+      "SIFTEDGOLD STATIC USA selection. Shipping worldwide from Barcelona. Tracking available in 24h.",
     images: [
-      "https://images.unsplash.com/photo-1679139350905-883f2fa05101?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-      "https://images.unsplash.com/photo-1613031876173-da7407c43fff?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
+      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
     ],
     priceTiers: [
-      { label: "1g", amount: 8 },
-      { label: "2g", amount: 15 },
-      { label: "3g", amount: 21 },
-      { label: "5g", amount: 33 },
-      { label: "10g", amount: 60 },
+      { label: "10g", amount: 300 },
+      { label: "50g", amount: 1200 },
+      { label: "100g", amount: 2100 },
     ],
+    badge: "Static USA",
     featured: false,
-    rating: 4.6,
-    reviewsCount: 203,
+    rating: 4.8,
+    reviewsCount: 20,
   },
   {
-    slug: "fumo-d-oriente",
-    name: "Fumo d'Oriente",
+    slug: "wonka-static-usa",
+    name: "WONKA STATIC USA",
     brand: "F.K.H",
-    category: "premium",
-    description: "Aromi esotici dall'est",
+    category: "usa",
+    description: "Wonka Static USA.",
     longDescription:
-      "Fumo d'Oriente racchiude il mistero e il fascino delle spezie orientali. Un blend esclusivo con note esotiche e avvolgenti che trasportano i sensi.",
+      "WONKA STATIC USA selection. Shipping worldwide from Barcelona. Tracking available in 24h.",
     images: [
-      "https://images.unsplash.com/photo-1758903846707-7e34aa99175c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-      "https://images.unsplash.com/photo-1567797005083-7b88aee866b7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
+      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
     ],
     priceTiers: [
-      { label: "1g", amount: 12 },
-      { label: "2g", amount: 22 },
-      { label: "3g", amount: 30 },
-      { label: "5g", amount: 46 },
+      { label: "10g", amount: 300 },
+      { label: "50g", amount: 1250 },
     ],
+    badge: "USA",
+    featured: false,
+    rating: 4.8,
+    reviewsCount: 16,
+  },
+  {
+    slug: "cali-usa-premium-exotic-black-cherry-coke",
+    name: "CALI USA PREMIUM EXOTIC",
+    brand: "Black Cherry Coke",
+    category: "cali",
+    description: "Cali USA Premium Exotic - Black Cherry Coke.",
+    longDescription:
+      "CALI USA PREMIUM EXOTIC Black Cherry Coke. Shipping worldwide from Barcelona. Tracking available in 24h.",
+    images: [
+      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
+    ],
+    priceTiers: [
+      { label: "28g", amount: 325 },
+      { label: "56g", amount: 600 },
+      { label: "112g", amount: 1100 },
+      { label: "224g", amount: 2000 },
+      { label: "1lb", amount: 4000 },
+    ],
+    badge: "Exotic",
+    featured: true,
+    rating: 4.8,
+    reviewsCount: 22,
+  },
+  {
+    slug: "vapes-usa",
+    name: "VAPES USA",
+    brand: "F.K.H",
+    category: "vapes",
+    description: "USA vapes.",
+    longDescription:
+      "VAPES USA. Shipping worldwide from Barcelona. Tracking available in 24h.",
+    images: [
+      "https://images.unsplash.com/photo-1601924638867-3a6de6b7a500?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
+    ],
+    priceTiers: [
+      { label: "1u", amount: 50 },
+      { label: "10u", amount: 400 },
+    ],
+    badge: "USA",
     featured: false,
     rating: 4.7,
-    reviewsCount: 76,
+    reviewsCount: 14,
   },
 ];
 
 async function main() {
+  await prisma.product.updateMany({
+    where: {
+      slug: {
+        in: [
+          "nero-assoluto",
+          "oro-puro",
+          "cristallo-verde",
+          "perla-nera",
+          "ambra-classica",
+          "fumo-d-oriente",
+        ],
+      },
+    },
+    data: { status: ProductStatus.archived },
+  });
+
+  await prisma.category.updateMany({
+    where: { slug: { in: ["premium", "gold", "limited", "new", "classic"] } },
+    data: { isActive: false },
+  });
+
   for (const category of categories) {
     await prisma.category.upsert({
       where: { slug: category.slug },
@@ -161,7 +360,7 @@ async function main() {
   for (const product of products) {
     const category = await prisma.category.findUniqueOrThrow({ where: { slug: product.category } });
 
-    await prisma.product.upsert({
+    const savedProduct = await prisma.product.upsert({
       where: { slug: product.slug },
       update: {
         name: product.name,
@@ -209,6 +408,70 @@ async function main() {
         },
       },
     });
+
+    await prisma.productPriceTier.updateMany({
+      where: {
+        productId: savedProduct.id,
+        label: { notIn: product.priceTiers.map((tier) => tier.label) },
+      },
+      data: { isActive: false },
+    });
+
+    for (const [index, tier] of product.priceTiers.entries()) {
+      const existingTier = await prisma.productPriceTier.findFirst({
+        where: { productId: savedProduct.id, label: tier.label },
+      });
+      const tierData = {
+        amount: tier.amount,
+        currency: "EUR",
+        sortOrder: (index + 1) * 10,
+        isActive: true,
+      };
+
+      if (existingTier) {
+        await prisma.productPriceTier.update({
+          where: { id: existingTier.id },
+          data: tierData,
+        });
+      } else {
+        await prisma.productPriceTier.create({
+          data: {
+            productId: savedProduct.id,
+            label: tier.label,
+            ...tierData,
+          },
+        });
+      }
+    }
+
+    for (const [index, url] of product.images.entries()) {
+      const existingMedia = await prisma.productMedia.findFirst({
+        where: { productId: savedProduct.id, url },
+      });
+      const mediaData = {
+        type: MediaType.image,
+        url,
+        thumbnailUrl: url,
+        mimeType: "image/jpeg",
+        sizeBytes: 0,
+        sortOrder: (index + 1) * 10,
+        alt: product.name,
+      };
+
+      if (existingMedia) {
+        await prisma.productMedia.update({
+          where: { id: existingMedia.id },
+          data: mediaData,
+        });
+      } else {
+        await prisma.productMedia.create({
+          data: {
+            productId: savedProduct.id,
+            ...mediaData,
+          },
+        });
+      }
+    }
   }
 
   const adminIds = (process.env.TELEGRAM_ADMIN_IDS ?? "")
@@ -231,12 +494,28 @@ async function main() {
 
   const contacts = [
     {
+      id: "seed-linktree-contact",
+      type: ContactType.custom,
+      label: "Linktree",
+      value: "familykinghash2.0",
+      href: "https://linktr.ee/familykinghash2.0",
+      sortOrder: 5,
+    },
+    {
+      id: "seed-instagram-contact",
+      type: ContactType.custom,
+      label: "Instagram",
+      value: "familykinghshofficial",
+      href: "https://www.instagram.com/familykinghshofficial?igsh=MW02aG02MTNwMWVsbQ%3D%3D&utm_source=qr",
+      sortOrder: 15,
+    },
+    {
       id: "seed-telegram-contact",
       type: ContactType.telegram,
       label: "Telegram",
       value: "@aureliocasillas3",
       href: "https://t.me/aureliocasillas3",
-      sortOrder: 10,
+      sortOrder: 20,
     },
     {
       id: "seed-signal-contact",
@@ -244,7 +523,7 @@ async function main() {
       label: "Signal",
       value: "Secure chat",
       href: "https://signal.me/#eu/uy4MO_w49Rffj-kMz7YNazKvZV2a7ujUbGTtjoi8__36geihO35O-qe2OJEk8aOc",
-      sortOrder: 20,
+      sortOrder: 30,
     },
     {
       id: "seed-threema-contact",
@@ -252,7 +531,7 @@ async function main() {
       label: "Threema",
       value: "P9CN86Z8",
       href: "https://threema.id/P9CN86Z8",
-      sortOrder: 30,
+      sortOrder: 40,
     },
   ];
 
@@ -281,9 +560,11 @@ async function main() {
   };
 
   for (const [index, method] of [
-    { code: "dhl", label: "DHL" },
-    { code: "ups", label: "UPS" },
-    { code: "inpost", label: "InPost" },
+    { code: "correos-spain", label: "Correos Spain - 50 EUR" },
+    { code: "inpost", label: "InPost / Mondial Relay - 20 EUR" },
+    { code: "seur", label: "Seur / DPD / BRT - 50 EUR" },
+    { code: "ups", label: "UPS - 50 EUR" },
+    { code: "dhl", label: "DHL - 50 EUR" },
   ].entries()) {
     await shippingMethodDb.shippingMethod.upsert({
       where: { code: method.code },

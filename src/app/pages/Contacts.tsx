@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { motion } from "motion/react";
-import { Phone, MessageCircle, Mail, MapPin, ExternalLink, Send, Link, ShieldCheck } from "lucide-react";
+import { Phone, MessageCircle, Mail, MapPin, ExternalLink, Send, Link, ShieldCheck, Instagram, Globe2, CreditCard, PackageCheck } from "lucide-react";
 import { TopBar } from "../components/TopBar";
 import { apiRequest } from "../api/client";
 import { ApiContact, ApiSiteSettings } from "../api/types";
@@ -16,6 +17,8 @@ const TYPE_STYLE = {
 };
 
 const CHANNEL_STYLE = {
+  linktree: { icon: Link, color: "#43E660", bg: "rgba(67,230,96,0.12)", border: "rgba(67,230,96,0.28)" },
+  instagram: { icon: Instagram, color: "#E1306C", bg: "rgba(225,48,108,0.12)", border: "rgba(225,48,108,0.28)" },
   signal: { icon: MessageCircle, color: "#3A76F0", bg: "rgba(58,118,240,0.12)", border: "rgba(58,118,240,0.28)" },
   threema: { icon: ShieldCheck, color: "#22c55e", bg: "rgba(34,197,94,0.12)", border: "rgba(34,197,94,0.28)" },
 };
@@ -61,6 +64,26 @@ export function Contacts() {
           <p style={{ color: error ? "#ef4444" : "#A0A0A0", fontSize: 13, marginTop: 4 }}>
             {error ? `${t("common.backend")}: ${error}` : t("contacts.intro")}
           </p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-5 rounded-2xl p-4"
+          style={{
+            background: "linear-gradient(135deg, rgba(255,77,109,0.12), rgba(59,130,246,0.07))",
+            border: "1px solid rgba(255,77,109,0.22)",
+          }}
+        >
+          <p style={{ color: "#FFFFFF", fontWeight: 800, fontSize: 15, marginBottom: 10 }}>
+            Be BTC ready before making contact
+          </p>
+          <div className="grid gap-2">
+            <InfoLine icon={<Globe2 size={14} color="#3B82F6" />} text="We talk: ES / US / FR / IT" />
+            <InfoLine icon={<PackageCheck size={14} color="#22c55e" />} text="Shipping worldwide and meet up Barcelona" />
+            <InfoLine icon={<CreditCard size={14} color="#FF4D6D" />} text="Payment: Crypto, Cash in Poste / CCPP, Bonifico +10%" />
+            <InfoLine icon={<PackageCheck size={14} color="#22c55e" />} text="Tracking available in 24h. Deposits Monday to Thursday." />
+          </div>
         </motion.div>
 
         <div className="flex flex-col gap-3">
@@ -164,7 +187,20 @@ export function Contacts() {
 
 function getContactStyle(contact: ApiContact) {
   const channel = `${contact.label} ${contact.value} ${contact.href}`.toLowerCase();
+  if (channel.includes("linktr.ee") || channel.includes("linktree")) return CHANNEL_STYLE.linktree;
+  if (channel.includes("instagram")) return CHANNEL_STYLE.instagram;
   if (channel.includes("signal")) return CHANNEL_STYLE.signal;
   if (channel.includes("threema")) return CHANNEL_STYLE.threema;
   return TYPE_STYLE[contact.type] ?? TYPE_STYLE.custom;
+}
+
+function InfoLine({ icon, text }: { icon: ReactNode; text: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="flex h-7 w-7 items-center justify-center rounded-full" style={{ background: "rgba(255,255,255,0.06)" }}>
+        {icon}
+      </span>
+      <span style={{ color: "#D1D5DB", fontSize: 12, lineHeight: 1.35 }}>{text}</span>
+    </div>
+  );
 }

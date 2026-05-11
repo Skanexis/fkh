@@ -433,13 +433,13 @@ Because this project currently uses Prisma `db push` rather than committed migra
 docker compose --env-file .env.production -f docker-compose.prod.yml exec backend npm run db:push
 ```
 
-Seed initial catalog data:
+Seed starter catalog, contacts, shipping methods, and admin users from env:
 
 ```bash
 docker compose --env-file .env.production -f docker-compose.prod.yml exec backend npm run db:seed
 ```
 
-Use seed only when you want the demo catalog/admin seed data. If the database already contains production data, do not re-run seed unless you understand what it upserts.
+The seed uses upsert for starter data. It archives the old demo products and keeps existing orders intact.
 
 ## 17. Verify Local Container Ports On VPS
 
@@ -652,7 +652,7 @@ git pull --ff-only
 docker compose --env-file .env.production -f docker-compose.prod.yml build
 docker compose --env-file .env.production -f docker-compose.prod.yml up -d
 docker compose --env-file .env.production -f docker-compose.prod.yml exec backend npm run db:push
-docker compose --env-file .env.production -f docker-compose.prod.yml exec backend npm run db:seed:contacts
+docker compose --env-file .env.production -f docker-compose.prod.yml exec backend npm run db:seed
 ```
 
 If frontend env changed, always rebuild frontend:
