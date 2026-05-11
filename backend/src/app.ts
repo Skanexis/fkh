@@ -23,6 +23,20 @@ export async function buildApp() {
     },
   });
 
+  app.removeContentTypeParser("application/json");
+  app.addContentTypeParser("application/json", { parseAs: "string" }, (_request, body, done) => {
+    if (!body) {
+      done(null, {});
+      return;
+    }
+
+    try {
+      done(null, JSON.parse(body as string));
+    } catch (error) {
+      done(error as Error, undefined);
+    }
+  });
+
   await app.register(helmet);
   await app.register(cors, {
     origin: (origin, callback) => {
