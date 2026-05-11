@@ -186,8 +186,8 @@ async function notifyNewOrder(order: any) {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: "✅ Принять заказ", callback_data: `order_accept:${order.publicId}` },
-          { text: "📦 CSV для доставки", callback_data: `order_csv:${order.publicId}` },
+          { text: "✅ Accept order", callback_data: `order_accept:${order.publicId}` },
+          { text: "📦 Delivery CSV", callback_data: `order_csv:${order.publicId}` },
         ],
       ],
     },
@@ -214,23 +214,23 @@ function formatAdminOrderMessage(order: any) {
   ].filter(Boolean).join("\n");
 
   return [
-    `🆕 <b>Новый заказ ${escapeHtml(order.publicId)}</b>`,
+    `🆕 <b>New order ${escapeHtml(order.publicId)}</b>`,
     "",
-    `<b>Клиент:</b> ${escapeHtml(order.customerName)}`,
+    `<b>Customer:</b> ${escapeHtml(order.customerName)}`,
     `<b>Telegram:</b> ${escapeHtml(telegram)}`,
-    `<b>Телефон:</b> ${escapeHtml(order.shippingPhone ?? order.customerPhone ?? "-")}`,
+    `<b>Phone:</b> ${escapeHtml(order.shippingPhone ?? order.customerPhone ?? "-")}`,
     `<b>Email:</b> ${escapeHtml(order.shippingEmail ?? order.customerEmail ?? "-")}`,
     "",
-    "<b>Товары:</b>",
+    "<b>Items:</b>",
     items,
     "",
-    `<b>Сумма:</b> ${money(order.totalAmount)} ${order.currency}`,
-    `<b>Доставка:</b> ${escapeHtml(order.shippingMethodPreference ?? "-")} (${money(order.shippingAmount ?? 0)} ${order.currency})`,
+    `<b>Total:</b> ${money(order.totalAmount)} ${order.currency}`,
+    `<b>Shipping:</b> ${escapeHtml(order.shippingMethodPreference ?? "-")} (${money(order.shippingAmount ?? 0)} ${order.currency})`,
     order.shippingPickupPoint ? `<b>Pickup point:</b> ${escapeHtml(order.shippingPickupPoint)}` : null,
     "",
-    "<b>Адрес:</b>",
+    "<b>Address:</b>",
     escapeHtml(address || "-"),
-    order.shippingInstructions ? `\n<b>Комментарий доставки:</b>\n${escapeHtml(order.shippingInstructions)}` : null,
+    order.shippingInstructions ? `\n<b>Delivery notes:</b>\n${escapeHtml(order.shippingInstructions)}` : null,
   ].filter(Boolean).join("\n");
 }
 

@@ -57,4 +57,49 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, retry 
   return payload?.data as T;
 }
 
+export function apiUploadFile<T>(
+  path: string,
+  file: File,
+  onProgress?: (progress: number) => void,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const body = new FormData();
+    const token = getAccessToken();
+
+    body.append("file", file);
+    xhr.open("POST", `${API_BASE_URL}${path}`);
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable || !onProgress) return;
+      onProgress(Math.round((event.loaded / event.total) * 100));
+    };
+
+    xhr.onload = () => {
+      const payload = parseJson(xhr.responseText);
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new ApiError(
+          xhr.status,
+          payload?.error?.code ?? "API_ERROR",
+          payload?.error?.message ?? "Upload failed",
+        ));
+        return;
+      }
+      resolve(payload?.data as T);
+    };
+
+    xhr.onerror = () => reject(new ApiError(0, "NETWORK_ERROR", "Upload failed"));
+    xhr.send(body);
+  });
+}
+
+function parseJson(value: string) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
 export { API_BASE_URL };

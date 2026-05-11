@@ -3,12 +3,15 @@ import type { DragEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Plus, Edit2, Trash2, X, Check, Search, Image, Upload, Video, Link2, Loader2 } from "lucide-react";
 import { Product, ProductMedia } from "../../data/products";
-import { apiRequest } from "../../api/client";
+import { apiRequest, apiUploadFile } from "../../api/client";
 import { ApiCategory, ApiMediaAsset, ApiProduct } from "../../api/types";
 import { toProduct } from "../../api/adapters";
 import { useI18n } from "../../i18n";
 
 type EditableProduct = Omit<Product, "id" | "rating" | "reviews"> & { id: string };
+const allowedMediaMimes = new Set(["image/jpeg", "image/png", "image/webp", "video/mp4", "video/webm"]);
+const maxImageBytes = 10 * 1024 * 1024;
+const maxVideoBytes = 100 * 1024 * 1024;
 
 export function AdminProducts() {
   const { t } = useI18n();
@@ -22,6 +25,8 @@ export function AdminProducts() {
   const [mediaUrl, setMediaUrl] = useState("");
   const [mediaUrlType, setMediaUrlType] = useState<ProductMedia["type"]>("image");
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [mediaUploadProgress, setMediaUploadProgress] = useState(0);
+  const [mediaUploadError, setMediaUploadError] = useState<string | null>(null);
   const mediaInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -52,6 +57,8 @@ export function AdminProducts() {
     setEditingProduct({ ...product });
     setMediaUrl("");
     setMediaUrlType("image");
+    setMediaUploadError(null);
+    setMediaUploadProgress(0);
     setShowModal(true);
   }
 
@@ -71,11 +78,17 @@ export function AdminProducts() {
     });
     setMediaUrl("");
     setMediaUrlType("image");
+    setMediaUploadError(null);
+    setMediaUploadProgress(0);
     setShowModal(true);
   }
 
   async function handleSave() {
     if (!editingProduct) return;
+    if (uploadingMedia) {
+      setMediaUploadError(t("admin.waitForUpload"));
+      return;
+    }
     const exists = products.find((p) => p.id === editingProduct.id);
     const category = categories.find((c) => c.name === editingProduct.category) ?? categories[0];
     if (!category) {
@@ -104,6 +117,7 @@ export function AdminProducts() {
       media: getEditableMedia(editingProduct)
         .filter((item) => item.url)
         .map((item, index) => ({
+          mediaId: item.mediaId,
           type: item.type,
           url: item.url,
           thumbnailUrl: item.type === "image" ? item.thumbnailUrl || item.url : item.thumbnailUrl ?? null,
@@ -136,12 +150,12 @@ export function AdminProducts() {
   async function handleMediaUpload(file: File) {
     if (!editingProduct) return;
     setUploadingMedia(true);
+    setMediaUploadError(null);
+    setMediaUploadProgress(0);
     try {
-      const body = new FormData();
-      body.append("file", file);
-      const media = await apiRequest<ApiMediaAsset>("/api/v1/admin/media", { method: "POST", body });
+      const media = await apiUploadFile<ApiMediaAsset>("/api/v1/admin/media", file, setMediaUploadProgress);
       addMediaToDraft({
-        id: media.id,
+        mediaId: media.id,
         type: media.type,
         url: media.url,
         thumbnailUrl: media.thumbnailUrl,
@@ -149,15 +163,28 @@ export function AdminProducts() {
         sortOrder: (getEditableMedia(editingProduct).length + 1) * 10,
       });
       setError(null);
+      setMediaUploadProgress(100);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("admin.uploadMediaError"));
+      const message = err instanceof Error ? err.message : t("admin.uploadMediaError");
+      setError(message);
+      setMediaUploadError(message);
     } finally {
       setUploadingMedia(false);
     }
   }
 
   function handleMediaFileSelect(file: File | undefined) {
-    if (file && !uploadingMedia) void handleMediaUpload(file);
+    if (!file || uploadingMedia) return;
+    if (!allowedMediaMimes.has(file.type)) {
+      setMediaUploadError(t("admin.unsupportedMedia"));
+      return;
+    }
+    const maxBytes = file.type.startsWith("video/") ? maxVideoBytes : maxImageBytes;
+    if (file.size > maxBytes) {
+      setMediaUploadError(t(file.type.startsWith("video/") ? "admin.videoTooLarge" : "admin.imageTooLarge"));
+      return;
+    }
+    void handleMediaUpload(file);
   }
 
   function handleMediaDrop(event: DragEvent<HTMLDivElement>) {
@@ -543,8 +570,25 @@ export function AdminProducts() {
                       }}
                     >
                       {uploadingMedia ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                      {uploadingMedia ? t("admin.uploading") : t("admin.uploadMedia")}
+                      {uploadingMedia ? `${t("admin.uploading")} ${mediaUploadProgress}%` : t("admin.uploadMedia")}
                     </button>
+                    {uploadingMedia && (
+                      <div className="h-1.5 overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
+                        <div
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${mediaUploadProgress}%`,
+                            background: "linear-gradient(135deg, #3B82F6, #60A5FA)",
+                            transition: "width 0.2s ease",
+                          }}
+                        />
+                      </div>
+                    )}
+                    {mediaUploadError && (
+                      <p style={{ color: "#ef4444", fontSize: 12, lineHeight: 1.45 }}>
+                        {mediaUploadError}
+                      </p>
+                    )}
                     <input
                       ref={mediaInputRef}
                       type="file"
@@ -663,12 +707,14 @@ export function AdminProducts() {
                 </button>
                 <button
                   onClick={handleSave}
+                  disabled={uploadingMedia}
                   className="flex-1 py-3 rounded-xl flex items-center justify-center gap-2"
                   style={{
                     background: "linear-gradient(135deg, #3B82F6, #60A5FA)",
                     color: "#FFFFFF",
                     fontWeight: 700,
                     fontSize: 14,
+                    opacity: uploadingMedia ? 0.65 : 1,
                   }}
                 >
                   <Check size={16} strokeWidth={2.5} />

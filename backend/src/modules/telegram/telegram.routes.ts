@@ -66,7 +66,7 @@ export async function registerTelegramRoutes(app: FastifyInstance) {
 
     const nonce = text.split(/\s+/)[1];
     if (!nonce) {
-      await sendTelegramMessage(message.chat.id, "Apri il login dal sito e riprova.");
+      await sendTelegramMessage(message.chat.id, "Open the login flow from the site and try again.");
       return { data: { ok: true } };
     }
 
@@ -83,13 +83,13 @@ async function handleCallbackQuery(callbackQuery: NonNullable<TelegramUpdate["ca
   const fromId = callbackQuery.from?.id;
 
   if (!isTelegramAdminActionAllowed({ fromId, chatId })) {
-    await answerTelegramCallback(callbackQuery.id, "Нет доступа.", true);
+    await answerTelegramCallback(callbackQuery.id, "Access denied.", true);
     return;
   }
 
   const [action, publicId] = data.split(":");
   if (!publicId || !["order_accept", "order_csv"].includes(action)) {
-    await answerTelegramCallback(callbackQuery.id, "Неизвестное действие.", true);
+    await answerTelegramCallback(callbackQuery.id, "Unknown action.", true);
     return;
   }
 
@@ -99,13 +99,13 @@ async function handleCallbackQuery(callbackQuery: NonNullable<TelegramUpdate["ca
   });
 
   if (!order) {
-    await answerTelegramCallback(callbackQuery.id, "Заказ не найден.", true);
+    await answerTelegramCallback(callbackQuery.id, "Order not found.", true);
     return;
   }
 
   if (action === "order_accept") {
     if (order.status !== OrderStatus.pending) {
-      await answerTelegramCallback(callbackQuery.id, `Заказ уже ${order.status}.`, true);
+      await answerTelegramCallback(callbackQuery.id, `Order is already ${order.status}.`, true);
       return;
     }
 
@@ -114,15 +114,15 @@ async function handleCallbackQuery(callbackQuery: NonNullable<TelegramUpdate["ca
       data: { status: OrderStatus.accepted, acceptedAt: new Date() },
       include: { items: true },
     });
-    await answerTelegramCallback(callbackQuery.id, `Заказ ${accepted.publicId} принят.`);
+    await answerTelegramCallback(callbackQuery.id, `Order ${accepted.publicId} accepted.`);
     if (chatId) {
-      await sendTelegramMessage(chatId, `✅ Заказ ${accepted.publicId} принят.`);
+      await sendTelegramMessage(chatId, `✅ Order ${accepted.publicId} accepted.`);
     }
     return;
   }
 
   if (!chatId) {
-    await answerTelegramCallback(callbackQuery.id, "Не удалось определить чат.", true);
+    await answerTelegramCallback(callbackQuery.id, "Could not determine the chat.", true);
     return;
   }
 
@@ -130,9 +130,9 @@ async function handleCallbackQuery(callbackQuery: NonNullable<TelegramUpdate["ca
     chatId,
     `${order.publicId}-delivery.csv`,
     createDeliveryCsv(order),
-    `CSV для доставки ${order.publicId}`,
+    `Delivery CSV for ${order.publicId}`,
   );
-  await answerTelegramCallback(callbackQuery.id, "CSV отправлен.");
+  await answerTelegramCallback(callbackQuery.id, "CSV sent.");
 }
 
 function createDeliveryCsv(order: any) {

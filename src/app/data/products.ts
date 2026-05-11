@@ -6,6 +6,7 @@ export interface PriceTier {
 
 export interface ProductMedia {
   id?: string;
+  mediaId?: string;
   type: "image" | "video";
   url: string;
   thumbnailUrl?: string | null;

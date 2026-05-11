@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
 import path from "node:path";
-import { mkdir, writeFile } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { mkdir, unlink } from "node:fs/promises";
+import type { Readable } from "node:stream";
 import type { FastifyInstance } from "fastify";
 import { MediaType } from "@prisma/client";
 import { requireAdmin } from "../../common/auth.js";
@@ -33,18 +35,16 @@ export async function registerMediaRoutes(app: FastifyInstance) {
 
     if (!mediaType) throw badRequest("Unsupported file type");
 
-    const buffer = await file.toBuffer();
     const maxBytes = mediaType === MediaType.image ? maxImageBytes : maxVideoBytes;
-    if (buffer.byteLength > maxBytes) throw badRequest("File is too large");
-
     const ext = extensionFromMime(file.mimetype);
     const id = crypto.randomUUID();
     const safeName = `${id}${ext}`;
     const uploadDir = path.resolve(process.cwd(), "uploads");
     await mkdir(uploadDir, { recursive: true });
-    await writeFile(path.join(uploadDir, safeName), buffer);
+    const targetPath = path.join(uploadDir, safeName);
+    const sizeBytes = await saveFileStream(file.file, targetPath, maxBytes);
 
-    const publicBase = env.PUBLIC_API_URL.replace(/\/$/, "");
+    const publicBase = (env.PUBLIC_CDN_URL || env.PUBLIC_API_URL).replace(/\/$/, "");
     const url = `${publicBase}/uploads/${safeName}`;
     const asset = await prisma.mediaAsset.create({
       data: {
@@ -53,11 +53,45 @@ export async function registerMediaRoutes(app: FastifyInstance) {
         url,
         thumbnailUrl: mediaType === MediaType.image ? url : null,
         mimeType: file.mimetype,
-        sizeBytes: buffer.byteLength,
+        sizeBytes,
       },
     });
 
     return { data: serializeMediaAsset(asset) };
+  });
+}
+
+function saveFileStream(stream: Readable, targetPath: string, maxBytes: number) {
+  return new Promise<number>((resolve, reject) => {
+    let sizeBytes = 0;
+    let settled = false;
+    const output = createWriteStream(targetPath);
+
+    function fail(error: Error) {
+      if (settled) return;
+      settled = true;
+      stream.destroy();
+      output.destroy();
+      void unlink(targetPath).catch(() => undefined);
+      reject(error);
+    }
+
+    stream.on("data", (chunk: Buffer) => {
+      sizeBytes += chunk.byteLength;
+      if (sizeBytes > maxBytes) {
+        fail(badRequest("File is too large"));
+      }
+    });
+    stream.on("limit", () => fail(badRequest("File is too large")));
+    stream.on("error", fail);
+    output.on("error", fail);
+    output.on("finish", () => {
+      if (settled) return;
+      settled = true;
+      resolve(sizeBytes);
+    });
+
+    stream.pipe(output);
   });
 }
 

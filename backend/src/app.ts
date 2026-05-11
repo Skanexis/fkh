@@ -18,6 +18,7 @@ import { registerMediaRoutes } from "./modules/media/media.routes.js";
 
 export async function buildApp() {
   const app = Fastify({
+    bodyLimit: 110 * 1024 * 1024,
     logger: {
       level: env.NODE_ENV === "production" ? "info" : "debug",
     },
@@ -48,11 +49,24 @@ export async function buildApp() {
     },
     credentials: true,
   });
-  await app.register(multipart);
+  await app.register(multipart, {
+    limits: {
+      files: 1,
+      fileSize: 100 * 1024 * 1024,
+    },
+  });
   await app.register(jwt, { secret: env.JWT_ACCESS_SECRET });
   await app.register(fastifyStatic, {
     root: path.resolve(process.cwd(), "uploads"),
     prefix: "/uploads/",
+    maxAge: "30d",
+    immutable: true,
+    setHeaders: (response, filePath) => {
+      if (/\.(mp4|webm)$/i.test(filePath)) {
+        response.setHeader("Cache-Control", "public, max-age=2592000, immutable");
+        response.setHeader("Accept-Ranges", "bytes");
+      }
+    },
   });
 
   app.setErrorHandler((error, _request, reply) => {
@@ -67,7 +81,17 @@ export async function buildApp() {
       return;
     }
 
-    const anyError = error as { validation?: unknown };
+    const anyError = error as { code?: string; validation?: unknown };
+    if (anyError.code === "FST_REQ_FILE_TOO_LARGE") {
+      reply.status(413).send({
+        error: {
+          code: "FILE_TOO_LARGE",
+          message: "File is too large",
+        },
+      });
+      return;
+    }
+
     if (anyError.validation) {
       reply.status(400).send({
         error: {

@@ -78,7 +78,7 @@ export async function confirmTelegramLogin(nonce: string, telegramUser: Telegram
     },
   });
 
-  return { ok: true, message: "Accesso confermato. Puoi tornare al sito." };
+  return { ok: true, message: "Access confirmed. You can return to the site." };
 }
 
 export async function sendTelegramMessage(chatId: string | number, text: string) {
