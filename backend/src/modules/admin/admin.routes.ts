@@ -4,10 +4,12 @@ import { z } from "zod";
 import { requireAdmin } from "../../common/auth.js";
 import { badRequest, notFound } from "../../common/http-error.js";
 import { money, pageMeta } from "../../common/serialize.js";
+import { env } from "../../config/env.js";
 import { prisma } from "../../db/prisma.js";
 import { serializeProduct, serializeShippingMethod, serializeSiteSettings } from "../catalog/catalog.routes.js";
 import { assertOrderTransition, serializeOrder } from "../orders/orders.routes.js";
 import { serializeAuthUser } from "../auth/auth.service.js";
+import { sendTelegramJson } from "../telegram/telegram.service.js";
 
 const db = prisma as typeof prisma & {
   siteSettings: {
@@ -82,6 +84,18 @@ const shippingMethodPayload = z.object({
   label: z.string().min(2).max(120),
   isActive: z.boolean().default(true),
   sortOrder: z.number().int().default(0),
+});
+
+const orderTrackingPayload = z.object({
+  trackingCode: z.string().trim().min(2).max(120),
+  trackingUrl: z.preprocess(
+    (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
+    z.string().trim().url().max(1000).optional(),
+  ),
+  message: z.preprocess(
+    (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
+    z.string().trim().max(1000).optional(),
+  ),
 });
 
 export async function registerAdminRoutes(app: FastifyInstance) {
@@ -256,6 +270,53 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       include: { items: true },
     });
     await audit(request, admin.id, "order.status_update", "Order", id, before, order);
+
+    return { data: serializeOrder(order) };
+  });
+
+  app.patch("/api/v1/admin/orders/:id/tracking", async (request) => {
+    const admin = await requireAdmin(request);
+    const id = parseId(request);
+    const body = orderTrackingPayload.safeParse(request.body);
+    if (!body.success) throw badRequest("Invalid tracking payload", body.error.flatten());
+    if (!env.TELEGRAM_BOT_TOKEN) throw badRequest("Telegram bot is not configured");
+
+    const before = await prisma.order.findUnique({ where: { id } });
+    if (!before) throw notFound("Order not found");
+    if (before.status === OrderStatus.cancelled) throw badRequest("Cancelled orders cannot be completed");
+    if (!before.telegramIdSnapshot) throw badRequest("Order has no Telegram recipient");
+
+    const text = formatTrackingTelegramMessage({
+      publicId: before.publicId,
+      trackingCode: body.data.trackingCode,
+      trackingUrl: body.data.trackingUrl,
+      message: body.data.message,
+    });
+    const sent = await sendTelegramJson("sendMessage", {
+      chat_id: before.telegramIdSnapshot,
+      parse_mode: "HTML",
+      disable_web_page_preview: false,
+      text,
+    }) as { ok?: boolean; description?: string } | null;
+    if (!sent?.ok) {
+      throw badRequest(sent?.description ?? "Telegram message was not sent");
+    }
+
+    const now = new Date();
+    const order = await prisma.order.update({
+      where: { id },
+      data: {
+        status: OrderStatus.completed,
+        acceptedAt: before.acceptedAt ?? now,
+        completedAt: now,
+        trackingCode: body.data.trackingCode,
+        trackingUrl: body.data.trackingUrl ?? null,
+        trackingMessage: body.data.message ?? null,
+        trackingSentAt: now,
+      },
+      include: { items: true },
+    });
+    await audit(request, admin.id, "order.tracking_sent", "Order", id, before, order);
 
     return { data: serializeOrder(order) };
   });
@@ -552,6 +613,28 @@ function slugify(value: string) {
     .replace(/['"]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function formatTrackingTelegramMessage(input: {
+  publicId: string;
+  trackingCode: string;
+  trackingUrl?: string;
+  message?: string;
+}) {
+  return [
+    `✅ <b>Ordine ${escapeHtml(input.publicId)} spedito</b>`,
+    "",
+    `Tracking: <code>${escapeHtml(input.trackingCode)}</code>`,
+    input.trackingUrl ? `Link: ${escapeHtml(input.trackingUrl)}` : null,
+    input.message ? `\n${escapeHtml(input.message)}` : null,
+  ].filter(Boolean).join("\n");
+}
+
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 async function audit(

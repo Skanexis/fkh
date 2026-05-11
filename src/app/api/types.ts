@@ -89,6 +89,12 @@ export interface ApiOrder {
     pickupPoint?: string | null;
     instructions?: string | null;
   };
+  tracking?: {
+    code?: string | null;
+    url?: string | null;
+    message?: string | null;
+    sentAt?: string | null;
+  };
   status: "pending" | "accepted" | "completed" | "cancelled";
   totalAmount: number;
   subtotalAmount: number;

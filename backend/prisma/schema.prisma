@@ -235,6 +235,10 @@ model Order {
   currency                 String      @default("EUR")
   customerComment          String?
   adminComment             String?
+  trackingCode             String?
+  trackingUrl              String?
+  trackingMessage          String?
+  trackingSentAt           DateTime?
   createdAt                DateTime    @default(now())
   updatedAt                DateTime    @updatedAt
   acceptedAt               DateTime?
@@ -294,6 +298,12 @@ model ShippingMethod {
   isActive  Boolean  @default(true)
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SequenceCounter {
+  name      String   @id
+  value     Int      @default(0)
   updatedAt DateTime @updatedAt
 }
 

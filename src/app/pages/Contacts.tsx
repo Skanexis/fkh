@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { Phone, MessageCircle, Mail, MapPin, ExternalLink, Send, Link } from "lucide-react";
+import { Phone, MessageCircle, Mail, MapPin, ExternalLink, Send, Link, ShieldCheck } from "lucide-react";
 import { TopBar } from "../components/TopBar";
 import { apiRequest } from "../api/client";
 import { ApiContact, ApiSiteSettings } from "../api/types";
@@ -13,6 +13,11 @@ const TYPE_STYLE = {
   email: { icon: Mail, color: "#FF4D6D", bg: "rgba(255,77,109,0.1)", border: "rgba(255,77,109,0.2)" },
   address: { icon: MapPin, color: "#ef4444", bg: "rgba(239,68,68,0.1)", border: "rgba(239,68,68,0.2)" },
   custom: { icon: Link, color: "#A78BFA", bg: "rgba(167,139,250,0.1)", border: "rgba(167,139,250,0.2)" },
+};
+
+const CHANNEL_STYLE = {
+  signal: { icon: MessageCircle, color: "#3A76F0", bg: "rgba(58,118,240,0.12)", border: "rgba(58,118,240,0.28)" },
+  threema: { icon: ShieldCheck, color: "#22c55e", bg: "rgba(34,197,94,0.12)", border: "rgba(34,197,94,0.28)" },
 };
 
 export function Contacts() {
@@ -60,7 +65,7 @@ export function Contacts() {
 
         <div className="flex flex-col gap-3">
           {contacts.map((contact, i) => {
-            const style = TYPE_STYLE[contact.type] ?? TYPE_STYLE.custom;
+            const style = getContactStyle(contact);
             const Icon = style.icon;
             return (
               <motion.a
@@ -155,4 +160,11 @@ export function Contacts() {
       </div>
     </div>
   );
+}
+
+function getContactStyle(contact: ApiContact) {
+  const channel = `${contact.label} ${contact.value} ${contact.href}`.toLowerCase();
+  if (channel.includes("signal")) return CHANNEL_STYLE.signal;
+  if (channel.includes("threema")) return CHANNEL_STYLE.threema;
+  return TYPE_STYLE[contact.type] ?? TYPE_STYLE.custom;
 }

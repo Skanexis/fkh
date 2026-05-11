@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Clock, Package, CheckCircle, Search, X, MapPin, Truck, Phone, Mail } from "lucide-react";
+import { Clock, Package, CheckCircle, Search, X, MapPin, Truck, Phone, Mail, Send } from "lucide-react";
 import { apiRequest } from "../../api/client";
 import { ApiOrder } from "../../api/types";
 import { useI18n } from "../../i18n";
@@ -19,6 +19,7 @@ interface AdminOrder {
   customerEmail?: string | null;
   customerPhone?: string | null;
   shipping?: ApiOrder["shipping"];
+  tracking?: ApiOrder["tracking"];
 }
 
 const STATUS_CONFIG = {
@@ -34,10 +35,20 @@ export function AdminOrders() {
   const [filterStatus, setFilterStatus] = useState<OrderStatus | "all">("all");
   const [selectedOrder, setSelectedOrder] = useState<AdminOrder | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [trackingCode, setTrackingCode] = useState("");
+  const [trackingUrl, setTrackingUrl] = useState("");
+  const [trackingMessage, setTrackingMessage] = useState("");
+  const [trackingSending, setTrackingSending] = useState(false);
 
   useEffect(() => {
     void loadOrders();
   }, []);
+
+  useEffect(() => {
+    setTrackingCode(selectedOrder?.tracking?.code ?? "");
+    setTrackingUrl(selectedOrder?.tracking?.url ?? "");
+    setTrackingMessage(selectedOrder?.tracking?.message ?? "");
+  }, [selectedOrder?.id]);
 
   async function loadOrders() {
     try {
@@ -72,6 +83,29 @@ export function AdminOrders() {
     }
     if (selectedOrder?.id === id) {
       setSelectedOrder((prev) => prev ? { ...prev, status } : null);
+    }
+  }
+
+  async function sendTracking() {
+    if (!selectedOrder || !trackingCode.trim()) return;
+    setTrackingSending(true);
+    try {
+      const updated = await apiRequest<ApiOrder>(`/api/v1/admin/orders/${selectedOrder.id}/tracking`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          trackingCode: trackingCode.trim(),
+          trackingUrl: trackingUrl.trim() || undefined,
+          message: trackingMessage.trim() || undefined,
+        }),
+      });
+      const next = toAdminOrder(updated);
+      setOrders((prev) => prev.map((o) => (o.id === next.id ? next : o)));
+      setSelectedOrder(next);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Tracking message was not sent");
+    } finally {
+      setTrackingSending(false);
     }
   }
 
@@ -276,6 +310,60 @@ export function AdminOrders() {
                   </div>
                 </div>
 
+                <div
+                  className="rounded-xl p-3 mb-5"
+                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <Send size={15} color="#22c55e" />
+                    <p style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 13 }}>Tracking</p>
+                  </div>
+                  {selectedOrder.tracking?.sentAt && (
+                    <p className="mb-3" style={{ color: "#22c55e", fontSize: 12 }}>
+                      Sent {new Date(selectedOrder.tracking.sentAt).toLocaleString(locale)}
+                    </p>
+                  )}
+                  <div className="space-y-2">
+                    <input
+                      value={trackingCode}
+                      onChange={(event) => setTrackingCode(event.target.value)}
+                      placeholder="Tracking code"
+                      className="w-full rounded-xl px-3 py-2.5 bg-transparent outline-none"
+                      style={{ border: "1px solid rgba(255,255,255,0.08)", color: "#FFFFFF", fontSize: 13 }}
+                    />
+                    <input
+                      value={trackingUrl}
+                      onChange={(event) => setTrackingUrl(event.target.value)}
+                      placeholder="Tracking link"
+                      className="w-full rounded-xl px-3 py-2.5 bg-transparent outline-none"
+                      style={{ border: "1px solid rgba(255,255,255,0.08)", color: "#FFFFFF", fontSize: 13 }}
+                    />
+                    <textarea
+                      value={trackingMessage}
+                      onChange={(event) => setTrackingMessage(event.target.value)}
+                      placeholder="Message to customer"
+                      rows={3}
+                      className="w-full rounded-xl px-3 py-2.5 bg-transparent outline-none resize-none"
+                      style={{ border: "1px solid rgba(255,255,255,0.08)", color: "#FFFFFF", fontSize: 13 }}
+                    />
+                    <button
+                      onClick={sendTracking}
+                      disabled={trackingSending || !trackingCode.trim()}
+                      className="w-full flex items-center justify-center gap-2 rounded-xl py-3 transition-all"
+                      style={{
+                        background: trackingSending || !trackingCode.trim() ? "rgba(255,255,255,0.08)" : "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
+                        color: "#FFFFFF",
+                        fontWeight: 700,
+                        fontSize: 13,
+                        opacity: trackingSending || !trackingCode.trim() ? 0.6 : 1,
+                      }}
+                    >
+                      <Send size={15} />
+                      {trackingSending ? "Sending..." : "Send tracking and complete"}
+                    </button>
+                  </div>
+                </div>
+
                 {/* Status update */}
                 <p style={{ color: "#6B7280", fontSize: 12, marginBottom: 10 }}>{t("admin.updateStatus")}</p>
                 <div className="flex gap-2">
@@ -322,6 +410,7 @@ function toAdminOrder(order: ApiOrder): AdminOrder {
     customerEmail: order.customerEmail,
     customerPhone: order.customerPhone,
     shipping: order.shipping,
+    tracking: order.tracking,
   };
 }
 
