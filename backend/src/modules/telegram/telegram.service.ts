@@ -91,6 +91,51 @@ export async function sendTelegramMessage(chatId: string | number, text: string)
   }).catch(() => undefined);
 }
 
+export async function sendTelegramJson(method: string, payload: unknown) {
+  if (!env.TELEGRAM_BOT_TOKEN) return null;
+
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return response.json().catch(() => ({ ok: response.ok, description: response.statusText }));
+  } catch {
+    return null;
+  }
+}
+
+export async function answerTelegramCallback(callbackQueryId: string, text: string, showAlert = false) {
+  await sendTelegramJson("answerCallbackQuery", {
+    callback_query_id: callbackQueryId,
+    text,
+    show_alert: showAlert,
+  });
+}
+
+export async function sendTelegramDocument(chatId: string | number, filename: string, content: string, caption?: string) {
+  if (!env.TELEGRAM_BOT_TOKEN) return;
+
+  const form = new FormData();
+  form.append("chat_id", String(chatId));
+  if (caption) form.append("caption", caption);
+  form.append("document", new Blob([content], { type: "text/csv;charset=utf-8" }), filename);
+
+  await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendDocument`, {
+    method: "POST",
+    body: form,
+  }).catch(() => undefined);
+}
+
+export function isTelegramAdminActionAllowed(input: { fromId?: string | number; chatId?: string | number }) {
+  const fromId = input.fromId === undefined ? "" : String(input.fromId);
+  const chatId = input.chatId === undefined ? "" : String(input.chatId);
+  if (telegramAdminIds.size > 0) return telegramAdminIds.has(fromId);
+  if (env.TELEGRAM_ADMIN_CHAT_ID) return chatId === env.TELEGRAM_ADMIN_CHAT_ID;
+  return false;
+}
+
 async function getTelegramPhotoUrl(telegramId: string) {
   if (!env.TELEGRAM_BOT_TOKEN) return null;
 

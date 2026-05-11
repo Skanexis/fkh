@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { OrderStatus, ProductStatus } from "@prisma/client";
 import { z } from "zod";
@@ -7,7 +6,7 @@ import { badRequest, notFound } from "../../common/http-error.js";
 import { money } from "../../common/serialize.js";
 import { env } from "../../config/env.js";
 import { prisma } from "../../db/prisma.js";
-import { sendTelegramMessage } from "../telegram/telegram.service.js";
+import { sendTelegramJson } from "../telegram/telegram.service.js";
 
 const createOrderBody = z.object({
   customerComment: z.string().max(1000).optional(),
@@ -84,42 +83,43 @@ export async function registerOrderRoutes(app: FastifyInstance) {
     });
 
     const total = orderItems.reduce((sum, item) => sum + item.lineTotal, 0);
-    const publicId = await createPublicOrderId();
-
-    const order = await prisma.order.create({
-      data: {
-        publicId,
-        userId: user.id,
-        telegramIdSnapshot: user.telegramId,
-        telegramUsernameSnapshot: user.telegramUsername,
-        customerName: user.name,
-        customerEmail: body.data.customerEmail ?? body.data.shipping.email ?? user.email,
-        customerPhone: body.data.customerPhone ?? body.data.shipping.phone ?? user.phone,
-        shippingFullName: body.data.shipping.fullName,
-        shippingCompany: cleanOptional(body.data.shipping.company),
-        shippingAddressLine1: body.data.shipping.addressLine1,
-        shippingAddressLine2: cleanOptional(body.data.shipping.addressLine2),
-        shippingCity: body.data.shipping.city,
-        shippingRegion: cleanOptional(body.data.shipping.region),
-        shippingPostalCode: body.data.shipping.postalCode,
-        shippingCountry: body.data.shipping.country,
-        shippingCountryCode: cleanOptional(body.data.shipping.countryCode),
-        shippingPhone: body.data.shipping.phone,
-        shippingEmail: cleanOptional(body.data.shipping.email),
-        shippingTaxId: cleanOptional(body.data.shipping.taxId),
-        shippingMethodPreference: cleanOptional(body.data.shipping.methodPreference),
-        shippingPickupPoint: cleanOptional(body.data.shipping.pickupPoint),
-        shippingInstructions: cleanOptional(body.data.shipping.instructions),
-        customerComment: body.data.customerComment,
-        subtotalAmount: total,
-        totalAmount: total,
-        currency: "EUR",
-        items: { create: orderItems },
-      },
-      include: { items: true },
+    const order = await prisma.$transaction(async (tx) => {
+      const publicId = await createPublicOrderId(tx);
+      return tx.order.create({
+        data: {
+          publicId,
+          userId: user.id,
+          telegramIdSnapshot: user.telegramId,
+          telegramUsernameSnapshot: user.telegramUsername,
+          customerName: user.name,
+          customerEmail: body.data.customerEmail ?? body.data.shipping.email ?? user.email,
+          customerPhone: body.data.customerPhone ?? body.data.shipping.phone ?? user.phone,
+          shippingFullName: body.data.shipping.fullName,
+          shippingCompany: cleanOptional(body.data.shipping.company),
+          shippingAddressLine1: body.data.shipping.addressLine1,
+          shippingAddressLine2: cleanOptional(body.data.shipping.addressLine2),
+          shippingCity: body.data.shipping.city,
+          shippingRegion: cleanOptional(body.data.shipping.region),
+          shippingPostalCode: body.data.shipping.postalCode,
+          shippingCountry: body.data.shipping.country,
+          shippingCountryCode: cleanOptional(body.data.shipping.countryCode),
+          shippingPhone: body.data.shipping.phone,
+          shippingEmail: cleanOptional(body.data.shipping.email),
+          shippingTaxId: cleanOptional(body.data.shipping.taxId),
+          shippingMethodPreference: cleanOptional(body.data.shipping.methodPreference),
+          shippingPickupPoint: cleanOptional(body.data.shipping.pickupPoint),
+          shippingInstructions: cleanOptional(body.data.shipping.instructions),
+          customerComment: body.data.customerComment,
+          subtotalAmount: total,
+          totalAmount: total,
+          currency: "EUR",
+          items: { create: orderItems },
+        },
+        include: { items: true },
+      });
     });
 
-    await notifyNewOrder(order.publicId, user.name, total);
+    await notifyNewOrder(order);
 
     return { data: serializeOrder(order) };
   });
@@ -130,19 +130,98 @@ function cleanOptional(value?: string | null) {
   return trimmed ? trimmed : null;
 }
 
-async function createPublicOrderId() {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const suffix = crypto.randomInt(100000, 999999);
-    const publicId = `ORD-${suffix}`;
-    const exists = await prisma.order.findUnique({ where: { publicId } });
-    if (!exists) return publicId;
+async function createPublicOrderId(tx: any) {
+  const db = tx as typeof tx & {
+    sequenceCounter: {
+      upsert: (args: any) => Promise<{ value: number }>;
+      update: (args: any) => Promise<{ value: number }>;
+    };
+  };
+  let counter = await db.sequenceCounter.upsert({
+    where: { name: "order" },
+    update: { value: { increment: 1 } },
+    create: { name: "order", value: 1 },
+  });
+
+  for (let attempt = 0; attempt < 25; attempt += 1) {
+    const publicId = `Ordine#${counter.value}`;
+    const existing = await tx.order.findUnique({
+      where: { publicId },
+      select: { id: true },
+    });
+    if (!existing) return publicId;
+
+    counter = await db.sequenceCounter.update({
+      where: { name: "order" },
+      data: { value: { increment: 1 } },
+    });
   }
-  return `ORD-${Date.now()}`;
+
+  throw badRequest("Could not allocate order number");
 }
 
-async function notifyNewOrder(publicId: string, customerName: string, total: number) {
+async function notifyNewOrder(order: any) {
   if (!env.ORDER_NOTIFICATIONS_ENABLED || !env.TELEGRAM_ADMIN_CHAT_ID) return;
-  await sendTelegramMessage(env.TELEGRAM_ADMIN_CHAT_ID, `New order ${publicId}\n${customerName}\nTotal: EUR ${total}`);
+  await sendTelegramJson("sendMessage", {
+    chat_id: env.TELEGRAM_ADMIN_CHAT_ID,
+    parse_mode: "HTML",
+    text: formatAdminOrderMessage(order),
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "✅ Принять заказ", callback_data: `order_accept:${order.publicId}` },
+          { text: "📦 CSV для доставки", callback_data: `order_csv:${order.publicId}` },
+        ],
+      ],
+    },
+  });
+}
+
+function formatAdminOrderMessage(order: any) {
+  const telegram = order.telegramUsernameSnapshot
+    ? `@${order.telegramUsernameSnapshot}`
+    : `ID ${order.telegramIdSnapshot}`;
+  const items = order.items
+    .map((item: any) => {
+      const lineTotal = money(item.lineTotal);
+      return `• ${escapeHtml(item.productNameSnapshot)} ${escapeHtml(item.priceTierLabelSnapshot)} x${item.quantity} = ${lineTotal} ${order.currency}`;
+    })
+    .join("\n");
+  const address = [
+    order.shippingFullName,
+    order.shippingCompany,
+    order.shippingAddressLine1,
+    order.shippingAddressLine2,
+    [order.shippingPostalCode, order.shippingCity, order.shippingRegion].filter(Boolean).join(" "),
+    order.shippingCountry,
+  ].filter(Boolean).join("\n");
+
+  return [
+    `🆕 <b>Новый заказ ${escapeHtml(order.publicId)}</b>`,
+    "",
+    `<b>Клиент:</b> ${escapeHtml(order.customerName)}`,
+    `<b>Telegram:</b> ${escapeHtml(telegram)}`,
+    `<b>Телефон:</b> ${escapeHtml(order.shippingPhone ?? order.customerPhone ?? "-")}`,
+    `<b>Email:</b> ${escapeHtml(order.shippingEmail ?? order.customerEmail ?? "-")}`,
+    "",
+    "<b>Товары:</b>",
+    items,
+    "",
+    `<b>Сумма:</b> ${money(order.totalAmount)} ${order.currency}`,
+    `<b>Доставка:</b> ${escapeHtml(order.shippingMethodPreference ?? "-")}`,
+    order.shippingPickupPoint ? `<b>Pickup point:</b> ${escapeHtml(order.shippingPickupPoint)}` : null,
+    "",
+    "<b>Адрес:</b>",
+    escapeHtml(address || "-"),
+    order.shippingInstructions ? `\n<b>Комментарий доставки:</b>\n${escapeHtml(order.shippingInstructions)}` : null,
+  ].filter(Boolean).join("\n");
+}
+
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 export function assertOrderTransition(from: OrderStatus, to: OrderStatus) {
@@ -191,6 +270,12 @@ export function serializeOrder(order: any) {
     currency: order.currency,
     customerComment: order.customerComment,
     adminComment: order.adminComment,
+    tracking: {
+      code: order.trackingCode,
+      url: order.trackingUrl,
+      message: order.trackingMessage,
+      sentAt: order.trackingSentAt?.toISOString() ?? null,
+    },
     createdAt: order.createdAt.toISOString(),
     updatedAt: order.updatedAt.toISOString(),
     acceptedAt: order.acceptedAt?.toISOString() ?? null,
