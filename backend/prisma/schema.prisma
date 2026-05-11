@@ -1,0 +1,284 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  user
+  admin
+}
+
+enum UserStatus {
+  active
+  blocked
+  deleted
+}
+
+enum TelegramAuthStatus {
+  pending
+  confirmed
+  expired
+  cancelled
+}
+
+enum ProductStatus {
+  draft
+  active
+  archived
+}
+
+enum MediaType {
+  image
+  video
+}
+
+enum OrderStatus {
+  pending
+  accepted
+  completed
+  cancelled
+}
+
+enum ContactType {
+  phone
+  telegram
+  whatsapp
+  email
+  address
+  custom
+}
+
+model User {
+  id                   String                @id @default(uuid())
+  telegramId           String                @unique
+  telegramUsername     String?               @unique
+  telegramFirstName    String?
+  telegramLastName     String?
+  telegramLanguageCode String?
+  telegramPhotoUrl     String?
+  name                 String
+  avatarUrl            String?
+  email                String?               @unique
+  phone                String?               @unique
+  role                 UserRole              @default(user)
+  status               UserStatus            @default(active)
+  lastLoginAt          DateTime?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  authRequests         TelegramAuthRequest[]
+  sessions             UserSession[]
+  orders               Order[]
+  auditLogs            AuditLog[]            @relation("AuditActor")
+
+  @@index([role])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model TelegramAuthRequest {
+  id          String             @id @default(uuid())
+  nonce       String             @unique
+  status      TelegramAuthStatus @default(pending)
+  telegramId  String?
+  userId      String?
+  ip          String?
+  userAgent   String?
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  confirmedAt DateTime?
+  createdAt   DateTime           @default(now())
+  user        User?              @relation(fields: [userId], references: [id])
+
+  @@index([status])
+  @@index([expiresAt])
+  @@index([userId])
+}
+
+model UserSession {
+  id               String    @id @default(uuid())
+  userId           String
+  refreshTokenHash String    @unique
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  userAgent        String?
+  ip               String?
+  user             User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([revokedAt])
+}
+
+model Category {
+  id        String    @id @default(uuid())
+  slug      String    @unique
+  name      String
+  sortOrder Int       @default(0)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  products  Product[]
+}
+
+model Product {
+  id              String             @id @default(uuid())
+  slug            String             @unique
+  name            String
+  brand           String
+  categoryId      String
+  description     String
+  longDescription String
+  badge           String?
+  featured        Boolean            @default(false)
+  rating          Decimal?           @db.Decimal(3, 2)
+  reviewsCount    Int                @default(0)
+  status          ProductStatus      @default(draft)
+  sortOrder       Int                @default(0)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  category        Category           @relation(fields: [categoryId], references: [id])
+  media           ProductMedia[]
+  priceTiers      ProductPriceTier[]
+  orderItems      OrderItem[]
+
+  @@index([status])
+  @@index([categoryId])
+  @@index([featured])
+  @@index([createdAt])
+}
+
+model MediaAsset {
+  id              String         @id @default(uuid())
+  type            MediaType
+  url             String
+  thumbnailUrl    String?
+  mimeType        String
+  sizeBytes       Int
+  width           Int?
+  height          Int?
+  durationSeconds Int?
+  createdAt       DateTime       @default(now())
+  productMedia    ProductMedia[]
+}
+
+model ProductMedia {
+  id              String      @id @default(uuid())
+  productId       String
+  mediaAssetId    String?
+  type            MediaType
+  url             String
+  thumbnailUrl    String?
+  mimeType        String
+  sizeBytes       Int
+  width           Int?
+  height          Int?
+  durationSeconds Int?
+  sortOrder       Int         @default(0)
+  alt             String?
+  createdAt       DateTime    @default(now())
+  product         Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  mediaAsset      MediaAsset? @relation(fields: [mediaAssetId], references: [id])
+
+  @@index([productId])
+  @@index([sortOrder])
+}
+
+model ProductPriceTier {
+  id         String      @id @default(uuid())
+  productId  String
+  label      String
+  amount     Decimal     @db.Decimal(10, 2)
+  currency   String      @default("EUR")
+  sortOrder  Int         @default(0)
+  isActive   Boolean     @default(true)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+
+  @@index([productId])
+  @@index([isActive])
+}
+
+model Order {
+  id                       String      @id @default(uuid())
+  publicId                 String      @unique
+  userId                   String
+  telegramIdSnapshot       String
+  telegramUsernameSnapshot String?
+  customerName             String
+  customerEmail            String?
+  customerPhone            String?
+  status                   OrderStatus @default(pending)
+  subtotalAmount           Decimal     @db.Decimal(10, 2)
+  totalAmount              Decimal     @db.Decimal(10, 2)
+  currency                 String      @default("EUR")
+  customerComment          String?
+  adminComment             String?
+  createdAt                DateTime    @default(now())
+  updatedAt                DateTime    @updatedAt
+  acceptedAt               DateTime?
+  completedAt              DateTime?
+  cancelledAt              DateTime?
+  user                     User        @relation(fields: [userId], references: [id])
+  items                    OrderItem[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id                     String           @id @default(uuid())
+  orderId                String
+  productId              String
+  productNameSnapshot    String
+  productBrandSnapshot   String
+  priceTierId            String
+  priceTierLabelSnapshot String
+  unitPriceSnapshot      Decimal          @db.Decimal(10, 2)
+  quantity               Int
+  lineTotal              Decimal          @db.Decimal(10, 2)
+  thumbnailUrlSnapshot   String?
+  order                  Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product                Product          @relation(fields: [productId], references: [id])
+  priceTier              ProductPriceTier @relation(fields: [priceTierId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model Contact {
+  id        String      @id @default(uuid())
+  type      ContactType
+  label     String
+  value     String
+  href      String
+  isActive  Boolean     @default(true)
+  sortOrder Int         @default(0)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorUserId String?
+  action      String
+  entityType  String
+  entityId    String?
+  before      Json?
+  after       Json?
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+  actor       User?    @relation("AuditActor", fields: [actorUserId], references: [id])
+
+  @@index([actorUserId])
+  @@index([createdAt])
+  @@index([entityType])
+}
