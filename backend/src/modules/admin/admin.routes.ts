@@ -625,7 +625,7 @@ function formatTrackingTelegramMessage(input: {
   message?: string;
 }) {
   return [
-    `✅ <b>Ordine ${escapeHtml(input.publicId)} spedito</b>`,
+    `✅ <b>Order ${escapeHtml(input.publicId)} shipped</b>`,
     "",
     `Tracking: <code>${escapeHtml(input.trackingCode)}</code>`,
     input.trackingUrl ? `Link: ${escapeHtml(input.trackingUrl)}` : null,

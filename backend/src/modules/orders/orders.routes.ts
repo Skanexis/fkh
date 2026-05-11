@@ -161,7 +161,7 @@ async function createPublicOrderId(tx: any) {
   });
 
   for (let attempt = 0; attempt < 25; attempt += 1) {
-    const publicId = `Ordine#${counter.value}`;
+    const publicId = `Order#${counter.value}`;
     const existing = await tx.order.findUnique({
       where: { publicId },
       select: { id: true },
