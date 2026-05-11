@@ -652,6 +652,7 @@ git pull --ff-only
 docker compose --env-file .env.production -f docker-compose.prod.yml build
 docker compose --env-file .env.production -f docker-compose.prod.yml up -d
 docker compose --env-file .env.production -f docker-compose.prod.yml exec backend npm run db:push
+docker compose --env-file .env.production -f docker-compose.prod.yml exec backend npm run db:seed:contacts
 ```
 
 If frontend env changed, always rebuild frontend:

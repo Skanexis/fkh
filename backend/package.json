@@ -10,7 +10,8 @@
     "prisma:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "node dist/prisma/seed.js"
+    "db:seed": "node dist/prisma/seed.js",
+    "db:seed:contacts": "node dist/prisma/seed-contacts.js"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.2",
