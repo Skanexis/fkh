@@ -20,9 +20,7 @@ const products = [
     description: "Premium Moroccan drysift selection.",
     longDescription:
       "DRYSIFT PREMIUM from Morocco. Shipping worldwide from Barcelona. Tracking available in 24h.",
-    images: [
-      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-    ],
+    images: [],
     priceTiers: [
       { label: "100g", amount: 350 },
       { label: "500g", amount: 1300 },
@@ -41,9 +39,7 @@ const products = [
     description: "FKH120 2K25 premium batch.",
     longDescription:
       "FKH120 2K25 premium batch. Shipping worldwide from Barcelona. Tracking available in 24h.",
-    images: [
-      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-    ],
+    images: [],
     priceTiers: [
       { label: "100g", amount: 350 },
       { label: "500g", amount: 1300 },
@@ -62,9 +58,7 @@ const products = [
     description: "FKH120 2K26 premium batch.",
     longDescription:
       "FKH120 2K26 premium batch. Shipping worldwide from Barcelona. Tracking available in 24h.",
-    images: [
-      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-    ],
+    images: [],
     priceTiers: [
       { label: "100g", amount: 350 },
       { label: "500g", amount: 1350 },
@@ -83,9 +77,7 @@ const products = [
     description: "Frozen 105u selection.",
     longDescription:
       "LA COMMISSIONE Frozen 105u. Shipping worldwide from Barcelona. Tracking available in 24h.",
-    images: [
-      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-    ],
+    images: [],
     priceTiers: [
       { label: "50g", amount: 250 },
       { label: "100g", amount: 450 },
@@ -104,9 +96,7 @@ const products = [
     description: "Moroccan Eggs Frozen 90u.",
     longDescription:
       "EGGS FROZEN 90u from Morocco. Shipping worldwide from Barcelona. Tracking available in 24h.",
-    images: [
-      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-    ],
+    images: [],
     priceTiers: [
       { label: "50g", amount: 250 },
       { label: "100g", amount: 450 },
@@ -125,9 +115,7 @@ const products = [
     description: "Premium Moroccan frozen selection.",
     longDescription:
       "FROZEN PREMIUM from Morocco. Shipping worldwide from Barcelona. Tracking available in 24h.",
-    images: [
-      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-    ],
+    images: [],
     priceTiers: [
       { label: "50g", amount: 350 },
       { label: "100g", amount: 650 },
@@ -146,9 +134,7 @@ const products = [
     description: "Moroccan static super roocks.",
     longDescription:
       "STATIC SUPER ROOCKS from Morocco. Shipping worldwide from Barcelona. Tracking available in 24h.",
-    images: [
-      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-    ],
+    images: [],
     priceTiers: [
       { label: "50g", amount: 350 },
       { label: "100g", amount: 650 },
@@ -167,9 +153,7 @@ const products = [
     description: "Moroccan static 90u selection.",
     longDescription:
       "STATIC 90u from Morocco. Shipping worldwide from Barcelona. Tracking available in 24h.",
-    images: [
-      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-    ],
+    images: [],
     priceTiers: [
       { label: "50g", amount: 400 },
       { label: "100g", amount: 700 },
@@ -188,9 +172,7 @@ const products = [
     description: "Moroccan static 73u selection.",
     longDescription:
       "STATIC 73u from Morocco. Shipping worldwide from Barcelona. Tracking available in 24h.",
-    images: [
-      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-    ],
+    images: [],
     priceTiers: [
       { label: "50g", amount: 450 },
       { label: "100g", amount: 750 },
@@ -209,9 +191,7 @@ const products = [
     description: "USA drysift selection.",
     longDescription:
       "DRYSIFT USA selection. Shipping worldwide from Barcelona. Tracking available in 24h.",
-    images: [
-      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-    ],
+    images: [],
     priceTiers: [
       { label: "100g", amount: 1000 },
       { label: "1kg", amount: 8500 },
@@ -229,9 +209,7 @@ const products = [
     description: "USA Waterhash Siftedgold.",
     longDescription:
       "WATERHASH SIFTEDGOLD USA. Shipping worldwide from Barcelona. Tracking available in 24h.",
-    images: [
-      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-    ],
+    images: [],
     priceTiers: [
       { label: "100g", amount: 1000 },
       { label: "1kg", amount: 8500 },
@@ -249,9 +227,7 @@ const products = [
     description: "Siftedgold Static USA.",
     longDescription:
       "SIFTEDGOLD STATIC USA selection. Shipping worldwide from Barcelona. Tracking available in 24h.",
-    images: [
-      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-    ],
+    images: [],
     priceTiers: [
       { label: "10g", amount: 300 },
       { label: "50g", amount: 1200 },
@@ -270,9 +246,7 @@ const products = [
     description: "Wonka Static USA.",
     longDescription:
       "WONKA STATIC USA selection. Shipping worldwide from Barcelona. Tracking available in 24h.",
-    images: [
-      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-    ],
+    images: [],
     priceTiers: [
       { label: "10g", amount: 300 },
       { label: "50g", amount: 1250 },
@@ -290,9 +264,7 @@ const products = [
     description: "Cali USA Premium Exotic - Black Cherry Coke.",
     longDescription:
       "CALI USA PREMIUM EXOTIC Black Cherry Coke. Shipping worldwide from Barcelona. Tracking available in 24h.",
-    images: [
-      "https://images.unsplash.com/photo-1515823064-d6e0c04616a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-    ],
+    images: [],
     priceTiers: [
       { label: "28g", amount: 325 },
       { label: "56g", amount: 600 },
@@ -313,9 +285,7 @@ const products = [
     description: "USA vapes.",
     longDescription:
       "VAPES USA. Shipping worldwide from Barcelona. Tracking available in 24h.",
-    images: [
-      "https://images.unsplash.com/photo-1601924638867-3a6de6b7a500?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-    ],
+    images: [],
     priceTiers: [
       { label: "1u", amount: 50 },
       { label: "10u", amount: 400 },
@@ -328,6 +298,15 @@ const products = [
 ];
 
 async function main() {
+  await prisma.productMedia.deleteMany({
+    where: {
+      OR: [
+        { url: { startsWith: "https://images.unsplash.com/" } },
+        { thumbnailUrl: { startsWith: "https://images.unsplash.com/" } },
+      ],
+    },
+  });
+
   await prisma.product.updateMany({
     where: {
       slug: {
@@ -359,6 +338,7 @@ async function main() {
 
   for (const product of products) {
     const category = await prisma.category.findUniqueOrThrow({ where: { slug: product.category } });
+    const productImages = product.images.filter((url) => !isDemoProductMediaUrl(url));
 
     const savedProduct = await prisma.product.upsert({
       where: { slug: product.slug },
@@ -387,7 +367,7 @@ async function main() {
         reviewsCount: product.reviewsCount,
         status: ProductStatus.active,
         media: {
-          create: product.images.map((url, index) => ({
+          create: productImages.map((url, index) => ({
             type: MediaType.image,
             url,
             thumbnailUrl: url,
@@ -444,7 +424,7 @@ async function main() {
       }
     }
 
-    for (const [index, url] of product.images.entries()) {
+    for (const [index, url] of productImages.entries()) {
       const existingMedia = await prisma.productMedia.findFirst({
         where: { productId: savedProduct.id, url },
       });
@@ -582,6 +562,15 @@ async function main() {
         sortOrder: (index + 1) * 10,
       },
     });
+  }
+}
+
+function isDemoProductMediaUrl(value?: string | null) {
+  if (!value) return false;
+  try {
+    return new URL(value).hostname === "images.unsplash.com";
+  } catch {
+    return false;
   }
 }
 

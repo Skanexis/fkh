@@ -94,7 +94,7 @@ export async function registerOrderRoutes(app: FastifyInstance) {
         unitPriceSnapshot: unitPrice,
         quantity: item.quantity,
         lineTotal,
-        thumbnailUrlSnapshot: tier.product.media[0]?.thumbnailUrl ?? tier.product.media[0]?.url ?? null,
+        thumbnailUrlSnapshot: getOrderThumbnailUrl(tier.product.media),
       };
     });
 
@@ -157,6 +157,20 @@ function inferShippingPrice(label: string) {
 function effectiveShippingPrice(method: any) {
   const price = money(method.priceAmount ?? 0);
   return price > 0 ? price : inferShippingPrice(method.label);
+}
+
+function getOrderThumbnailUrl(media: any[]) {
+  const preview = media.find((item) => !isDemoProductMediaUrl(item.thumbnailUrl) && !isDemoProductMediaUrl(item.url));
+  return preview?.thumbnailUrl ?? preview?.url ?? null;
+}
+
+function isDemoProductMediaUrl(value?: string | null) {
+  if (!value) return false;
+  try {
+    return new URL(value).hostname === "images.unsplash.com";
+  } catch {
+    return false;
+  }
 }
 
 async function createPublicOrderId(tx: any) {

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
-import { ShoppingCart, Star, ChevronLeft, ChevronRight } from "lucide-react";
+import { ShoppingCart, Star, ChevronLeft, ChevronRight, PlayCircle, Video } from "lucide-react";
 import { Product } from "../data/products";
 import { useCart } from "../store/cart-context";
 import { useI18n } from "../i18n";
@@ -24,6 +24,7 @@ export function ProductCard({ product, variant = "standard" }: ProductCardProps)
   const selectedTier = product.priceTiers[selectedTierIdx];
   const imageGallery = product.images.filter((url) => Boolean(url) && !failedImages.has(url));
   const activeImageUrl = imageGallery[Math.min(imgIdx, Math.max(imageGallery.length - 1, 0))] ?? "";
+  const hasVideo = product.media?.some((item) => item.type === "video" && item.url) ?? false;
 
   function handleAdd(e: React.MouseEvent) {
     e.stopPropagation();
@@ -81,6 +82,8 @@ export function ProductCard({ product, variant = "standard" }: ProductCardProps)
               }}
             />
           </AnimatePresence>
+        ) : hasVideo ? (
+          <ProductVideoPlaceholder />
         ) : (
           <ProductImagePlaceholder className="absolute inset-0" iconSize={34} />
         )}
@@ -212,5 +215,43 @@ export function ProductCard({ product, variant = "standard" }: ProductCardProps)
         </motion.button>
       </div>
     </motion.div>
+  );
+}
+
+function ProductVideoPlaceholder() {
+  return (
+    <div
+      className="absolute inset-0 flex items-center justify-center"
+      style={{
+        background:
+          "radial-gradient(circle at 50% 35%, rgba(255,77,109,0.2), transparent 36%), linear-gradient(135deg, rgba(14,14,17,1), rgba(31,20,25,1))",
+      }}
+    >
+      <div
+        className="flex items-center justify-center rounded-full"
+        style={{
+          width: 66,
+          height: 66,
+          background: "rgba(255,77,109,0.14)",
+          border: "1px solid rgba(255,77,109,0.46)",
+          boxShadow: "0 10px 30px rgba(255,77,109,0.2)",
+        }}
+      >
+        <PlayCircle size={36} color="#FF4D6D" strokeWidth={1.8} />
+      </div>
+      <div
+        className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full px-2.5 py-1"
+        style={{
+          background: "rgba(11,11,12,0.74)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          color: "#FFFFFF",
+          fontSize: 10,
+          fontWeight: 700,
+        }}
+      >
+        <Video size={12} color="#FF4D6D" />
+        VIDEO
+      </div>
+    </div>
   );
 }

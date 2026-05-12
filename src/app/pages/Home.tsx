@@ -13,14 +13,13 @@ export function Home() {
       className="fkh-home min-h-screen flex flex-col relative overflow-hidden"
       style={{ background: "#0B0B0C", fontFamily: "Inter, sans-serif" }}
     >
-      {/* Background image overlay */}
+      {/* Background texture */}
       <div
         className="absolute inset-0"
         style={{
-          backgroundImage: `url(https://images.unsplash.com/photo-1613031876173-da7407c43fff?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=1080)`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          opacity: 0.08,
+          background:
+            "linear-gradient(145deg, rgba(255,77,109,0.08), transparent 36%), linear-gradient(315deg, rgba(255,154,139,0.06), transparent 42%)",
+          opacity: 1,
         }}
       />
 

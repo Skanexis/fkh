@@ -41,10 +41,7 @@ export const PRODUCTS: Product[] = [
     category: "Premium",
     description: "Extract premium di alta qualità",
     longDescription: "Nero Assoluto è il nostro estratto di punta, ottenuto attraverso un processo di estrazione a freddo che preserva tutti gli aromi e i principi attivi. Una scelta di lusso per i palati più esigenti.",
-    images: [
-      "https://images.unsplash.com/photo-1613031876173-da7407c43fff?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-      "https://images.unsplash.com/photo-1758903846707-7e34aa99175c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-    ],
+    images: [],
     priceTiers: [
       { weight: "1g", price: 10 },
       { weight: "2g", price: 18 },
@@ -63,10 +60,7 @@ export const PRODUCTS: Product[] = [
     category: "Gold",
     description: "Riserva speciale dorata",
     longDescription: "Oro Puro rappresenta il culmine della nostra arte estrattiva. Una riserva speciale con note calde e avvolgenti, dal colore ambrato intenso.",
-    images: [
-      "https://images.unsplash.com/photo-1737920459846-2d0318700658?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-      "https://images.unsplash.com/photo-1749497636434-82e53b6358b2?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-    ],
+    images: [],
     priceTiers: [
       { weight: "1g", price: 15 },
       { weight: "2g", price: 28 },
@@ -85,10 +79,7 @@ export const PRODUCTS: Product[] = [
     category: "New",
     description: "Selezione primaverile esclusiva",
     longDescription: "Cristallo Verde è una selezione stagionale di rara freschezza. Il processo di raccolta manuale garantisce un prodotto di eccezionale purezza.",
-    images: [
-      "https://images.unsplash.com/photo-1567797005083-7b88aee866b7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-      "https://images.unsplash.com/photo-1599989687563-8d28144a3cc4?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-    ],
+    images: [],
     priceTiers: [
       { weight: "1g", price: 12 },
       { weight: "2g", price: 22 },
@@ -106,10 +97,7 @@ export const PRODUCTS: Product[] = [
     category: "Limited",
     description: "Edizione limitata esclusiva",
     longDescription: "Perla Nera è una produzione limitatissima, disponibile solo in quantità ristrette. Un'esperienza sensoriale unica e irripetibile per i veri intenditori.",
-    images: [
-      "https://images.unsplash.com/photo-1733138187329-1663b79464b3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-      "https://images.unsplash.com/photo-1679139350905-883f2fa05101?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-    ],
+    images: [],
     priceTiers: [
       { weight: "1g", price: 20 },
       { weight: "2g", price: 38 },
@@ -127,10 +115,7 @@ export const PRODUCTS: Product[] = [
     category: "Classic",
     description: "La nostra ricetta originale",
     longDescription: "Ambra Classica è il prodotto storico di F.K.H, la ricetta originale che ha reso famoso il nostro marchio. Equilibrata, raffinata e sempre affidabile.",
-    images: [
-      "https://images.unsplash.com/photo-1679139350905-883f2fa05101?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-      "https://images.unsplash.com/photo-1613031876173-da7407c43fff?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-    ],
+    images: [],
     priceTiers: [
       { weight: "1g", price: 8 },
       { weight: "2g", price: 15 },
@@ -148,10 +133,7 @@ export const PRODUCTS: Product[] = [
     category: "Premium",
     description: "Aromi esotici dall'est",
     longDescription: "Fumo d'Oriente racchiude il mistero e il fascino delle spezie orientali. Un blend esclusivo con note esotiche e avvolgenti che trasportano i sensi.",
-    images: [
-      "https://images.unsplash.com/photo-1758903846707-7e34aa99175c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-      "https://images.unsplash.com/photo-1567797005083-7b88aee866b7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800",
-    ],
+    images: [],
     priceTiers: [
       { weight: "1g", price: 12 },
       { weight: "2g", price: 22 },

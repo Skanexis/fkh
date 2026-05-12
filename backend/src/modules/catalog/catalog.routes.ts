@@ -222,6 +222,8 @@ interface ReviewSummary {
 }
 
 export function serializeProduct(product: any, reviewSummary?: ReviewSummary) {
+  const media = product.media.filter((media: any) => !isDemoProductMediaUrl(media.url) && !isDemoProductMediaUrl(media.thumbnailUrl));
+
   return {
     id: product.id,
     slug: product.slug,
@@ -234,7 +236,7 @@ export function serializeProduct(product: any, reviewSummary?: ReviewSummary) {
     featured: product.featured,
     rating: reviewSummary ? reviewSummary.rating : 0,
     reviewsCount: reviewSummary ? reviewSummary.reviewsCount : 0,
-    media: product.media.map((media: any) => ({
+    media: media.map((media: any) => ({
       id: media.id,
       type: media.type,
       url: media.url,
@@ -250,6 +252,15 @@ export function serializeProduct(product: any, reviewSummary?: ReviewSummary) {
       sortOrder: tier.sortOrder,
     })),
   };
+}
+
+function isDemoProductMediaUrl(value?: string | null) {
+  if (!value) return false;
+  try {
+    return new URL(value).hostname === "images.unsplash.com";
+  } catch {
+    return false;
+  }
 }
 
 async function getReviewSummaries(productIds: string[]) {

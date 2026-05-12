@@ -1,18 +1,30 @@
 import { Product } from "../data/products";
 import { ApiOrder, ApiProduct } from "./types";
 
+function isDemoProductMediaUrl(value?: string | null) {
+  if (!value) return false;
+  try {
+    return new URL(value).hostname === "images.unsplash.com";
+  } catch {
+    return false;
+  }
+}
+
 export function toProduct(apiProduct: ApiProduct): Product {
-  const media = apiProduct.media.map((item) => ({
-    id: item.id,
-    type: item.type,
-    url: item.url,
-    thumbnailUrl: item.thumbnailUrl ?? null,
-    alt: item.alt ?? null,
-    sortOrder: item.sortOrder,
-  }));
+  const media = apiProduct.media
+    .filter((item) => !isDemoProductMediaUrl(item.url) && !isDemoProductMediaUrl(item.thumbnailUrl))
+    .map((item) => ({
+      id: item.id,
+      type: item.type,
+      url: item.url,
+      thumbnailUrl: item.thumbnailUrl ?? null,
+      alt: item.alt ?? null,
+      sortOrder: item.sortOrder,
+    }));
   const imagePreviews = media
     .filter((item) => item.type === "image" || item.thumbnailUrl)
     .map((item) => item.thumbnailUrl || item.url)
+    .filter((url) => !isDemoProductMediaUrl(url))
     .filter(Boolean);
 
   return {
