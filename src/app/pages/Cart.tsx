@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { AlertCircle, ShoppingCart, Trash2, Minus, Plus, ArrowRight, Package } from "lucide-react";
-import { useCart } from "../store/cart-context";
+import { useCart, type CartItem } from "../store/cart-context";
 import { TopBar } from "../components/TopBar";
 import { useNavigate } from "react-router";
 import { useAuth } from "../auth/auth-context";
@@ -9,6 +9,7 @@ import { TelegramLoginPanel } from "../auth/TelegramLoginPanel";
 import { apiRequest } from "../api/client";
 import { ApiOrder, ApiShippingMethod } from "../api/types";
 import { useI18n } from "../i18n";
+import { ProductImagePlaceholder } from "../components/ProductImagePlaceholder";
 
 interface ShippingForm {
   fullName: string;
@@ -25,6 +26,8 @@ interface ShippingForm {
   instructions: string;
 }
 
+type ShippingFieldErrors = Partial<Record<keyof ShippingForm | "shippingMethod", string>>;
+
 const initialShippingForm: ShippingForm = {
   fullName: "",
   company: "",
@@ -40,6 +43,8 @@ const initialShippingForm: ShippingForm = {
   instructions: "",
 };
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export function Cart() {
   const { items, removeItem, updateQuantity, total, clearCart } = useCart();
   const navigate = useNavigate();
@@ -49,6 +54,7 @@ export function Cart() {
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [showShippingForm, setShowShippingForm] = useState(false);
   const [shippingForm, setShippingForm] = useState<ShippingForm>(initialShippingForm);
+  const [shippingErrors, setShippingErrors] = useState<ShippingFieldErrors>({});
   const [shippingMethods, setShippingMethods] = useState<ApiShippingMethod[]>([]);
   const [selectedShippingMethodId, setSelectedShippingMethodId] = useState("");
   const selectedShippingMethod = shippingMethods.find((method) => method.id === selectedShippingMethodId);
@@ -84,9 +90,23 @@ export function Cart() {
       return;
     }
 
-    const validationError = validateShippingForm(shippingForm, selectedShippingMethod, t);
-    if (validationError) {
-      setCheckoutError(validationError);
+    const validationErrors = validateShippingForm(shippingForm, selectedShippingMethod, t);
+    if (Object.keys(validationErrors).length > 0) {
+      setShippingErrors(validationErrors);
+      const firstField = Object.keys(validationErrors)[0];
+      if (firstField) {
+        document.querySelector(`[data-shipping-field="${firstField}"]`)?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }
+      return;
+    }
+    setShippingErrors({});
+
+    const invalidCartItem = items.find((item) => !isValidOrderItem(item));
+    if (invalidCartItem) {
+      setCheckoutError(t("cart.invalidCartItem"));
       return;
     }
 
@@ -194,11 +214,7 @@ export function Cart() {
                   className="rounded-xl overflow-hidden flex-shrink-0"
                   style={{ width: 72, height: 72 }}
                 >
-                  <img
-                    src={item.product.images[0]}
-                    alt={item.product.name}
-                    className="w-full h-full object-cover"
-                  />
+                  <CartItemThumbnail item={item} />
                 </div>
 
                 {/* Info */}
@@ -288,35 +304,40 @@ export function Cart() {
             </div>
 
             <div className="grid grid-cols-1 gap-3">
-              <ShippingInput label={t("cart.fullName")} required value={shippingForm.fullName} onChange={(value) => updateShipping("fullName", value)} />
-              <ShippingInput label={t("cart.company")} value={shippingForm.company} onChange={(value) => updateShipping("company", value)} />
-              <ShippingInput label={t("cart.addressLine1")} required value={shippingForm.addressLine1} onChange={(value) => updateShipping("addressLine1", value)} />
-              <ShippingInput label={t("cart.addressLine2")} value={shippingForm.addressLine2} onChange={(value) => updateShipping("addressLine2", value)} />
+              <ShippingInput field="fullName" label={t("cart.fullName")} required value={shippingForm.fullName} error={shippingErrors.fullName} onChange={(value) => updateShipping("fullName", value)} />
+              <ShippingInput field="company" label={t("cart.company")} value={shippingForm.company} error={shippingErrors.company} onChange={(value) => updateShipping("company", value)} />
+              <ShippingInput field="addressLine1" label={t("cart.addressLine1")} required value={shippingForm.addressLine1} error={shippingErrors.addressLine1} onChange={(value) => updateShipping("addressLine1", value)} />
+              <ShippingInput field="addressLine2" label={t("cart.addressLine2")} value={shippingForm.addressLine2} error={shippingErrors.addressLine2} onChange={(value) => updateShipping("addressLine2", value)} />
 
               <div className="grid grid-cols-2 gap-3">
-                <ShippingInput label={t("cart.city")} required value={shippingForm.city} onChange={(value) => updateShipping("city", value)} />
-                <ShippingInput label={t("cart.region")} value={shippingForm.region} onChange={(value) => updateShipping("region", value)} />
+                <ShippingInput field="city" label={t("cart.city")} required value={shippingForm.city} error={shippingErrors.city} onChange={(value) => updateShipping("city", value)} />
+                <ShippingInput field="region" label={t("cart.region")} value={shippingForm.region} error={shippingErrors.region} onChange={(value) => updateShipping("region", value)} />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <ShippingInput label={t("cart.postalCode")} required value={shippingForm.postalCode} onChange={(value) => updateShipping("postalCode", value)} />
-                <ShippingInput label={t("cart.country")} required value={shippingForm.country} onChange={(value) => updateShipping("country", value)} />
+                <ShippingInput field="postalCode" label={t("cart.postalCode")} required value={shippingForm.postalCode} error={shippingErrors.postalCode} onChange={(value) => updateShipping("postalCode", value)} />
+                <ShippingInput field="country" label={t("cart.country")} required value={shippingForm.country} error={shippingErrors.country} onChange={(value) => updateShipping("country", value)} />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <ShippingInput label={t("cart.phone")} required value={shippingForm.phone} onChange={(value) => updateShipping("phone", value)} />
-                <ShippingInput label={t("cart.email")} type="email" value={shippingForm.email} onChange={(value) => updateShipping("email", value)} />
+                <ShippingInput field="phone" label={t("cart.phone")} required value={shippingForm.phone} error={shippingErrors.phone} onChange={(value) => updateShipping("phone", value)} />
+                <ShippingInput field="email" label={t("cart.email")} type="email" value={shippingForm.email} error={shippingErrors.email} onChange={(value) => updateShipping("email", value)} />
               </div>
 
-              <label className="block">
+              <label className="block" data-shipping-field="shippingMethod">
                 <span style={{ color: "#A0A0A0", fontSize: 12, fontWeight: 600 }}>{t("cart.courier")} *</span>
                 <select
                   value={selectedShippingMethodId}
-                  onChange={(event) => setSelectedShippingMethodId(event.target.value)}
+                  onChange={(event) => {
+                    setSelectedShippingMethodId(event.target.value);
+                    setShippingErrors((current) => ({ ...current, shippingMethod: undefined }));
+                    setCheckoutError(null);
+                  }}
+                  aria-invalid={Boolean(shippingErrors.shippingMethod)}
                   className="mt-1 w-full rounded-xl px-3 py-2 outline-none"
                   style={{
                     background: "rgba(255,255,255,0.06)",
-                    border: "1px solid rgba(255,255,255,0.08)",
+                    border: `1px solid ${shippingErrors.shippingMethod ? "rgba(239,68,68,0.72)" : "rgba(255,255,255,0.08)"}`,
                     color: "#FFFFFF",
                     fontSize: 14,
                   }}
@@ -331,23 +352,26 @@ export function Cart() {
                     ))
                   )}
                 </select>
+                {shippingErrors.shippingMethod && <FieldError message={shippingErrors.shippingMethod} />}
               </label>
-              <ShippingInput label={t("cart.pickupPoint")} value={shippingForm.pickupPoint} onChange={(value) => updateShipping("pickupPoint", value)} />
+              <ShippingInput field="pickupPoint" label={t("cart.pickupPoint")} value={shippingForm.pickupPoint} error={shippingErrors.pickupPoint} onChange={(value) => updateShipping("pickupPoint", value)} />
 
-              <label className="block">
+              <label className="block" data-shipping-field="instructions">
                 <span style={{ color: "#A0A0A0", fontSize: 12, fontWeight: 600 }}>{t("cart.deliveryNotes")}</span>
                 <textarea
                   value={shippingForm.instructions}
                   onChange={(event) => updateShipping("instructions", event.target.value)}
+                  aria-invalid={Boolean(shippingErrors.instructions)}
                   rows={3}
                   className="mt-1 w-full rounded-xl px-3 py-2 outline-none resize-none"
                   style={{
                     background: "rgba(255,255,255,0.06)",
-                    border: "1px solid rgba(255,255,255,0.08)",
+                    border: `1px solid ${shippingErrors.instructions ? "rgba(239,68,68,0.72)" : "rgba(255,255,255,0.08)"}`,
                     color: "#FFFFFF",
                     fontSize: 14,
                   }}
                 />
+                {shippingErrors.instructions && <FieldError message={shippingErrors.instructions} />}
               </label>
             </div>
           </motion.div>
@@ -443,24 +467,30 @@ export function Cart() {
 
   function updateShipping(field: keyof ShippingForm, value: string) {
     setShippingForm((current) => ({ ...current, [field]: value }));
+    setShippingErrors((current) => ({ ...current, [field]: undefined }));
+    setCheckoutError(null);
   }
 }
 
 function ShippingInput({
+  field,
   label,
   value,
   onChange,
+  error,
   required,
   type = "text",
 }: {
+  field: keyof ShippingForm;
   label: string;
   value: string;
   onChange: (value: string) => void;
+  error?: string;
   required?: boolean;
   type?: string;
 }) {
   return (
-    <label className="block">
+    <label className="block" data-shipping-field={field}>
       <span style={{ color: "#A0A0A0", fontSize: 12, fontWeight: 600 }}>
         {label}
         {required ? " *" : ""}
@@ -468,16 +498,40 @@ function ShippingInput({
       <input
         value={value}
         type={type}
+        aria-invalid={Boolean(error)}
         onChange={(event) => onChange(event.target.value)}
         className="mt-1 w-full rounded-xl px-3 py-2 outline-none"
         style={{
           background: "rgba(255,255,255,0.06)",
-          border: "1px solid rgba(255,255,255,0.08)",
+          border: `1px solid ${error ? "rgba(239,68,68,0.72)" : "rgba(255,255,255,0.08)"}`,
           color: "#FFFFFF",
           fontSize: 14,
         }}
       />
+      {error && <FieldError message={error} />}
     </label>
+  );
+}
+
+function FieldError({ message }: { message: string }) {
+  return <p style={{ color: "#ef4444", fontSize: 11, lineHeight: 1.35, marginTop: 5 }}>{message}</p>;
+}
+
+function CartItemThumbnail({ item }: { item: CartItem }) {
+  const [failed, setFailed] = useState(false);
+  const imageUrl = item.product.images.find(Boolean);
+
+  if (!imageUrl || failed) {
+    return <ProductImagePlaceholder iconSize={24} />;
+  }
+
+  return (
+    <img
+      src={imageUrl}
+      alt={item.product.name}
+      className="w-full h-full object-cover"
+      onError={() => setFailed(true)}
+    />
   );
 }
 
@@ -486,20 +540,51 @@ function validateShippingForm(
   shippingMethod: ApiShippingMethod | undefined,
   t: (key: string, values?: Record<string, string | number>) => string,
 ) {
-  const required: Array<[keyof ShippingForm, string]> = [
-    ["fullName", t("cart.fullName")],
-    ["addressLine1", t("cart.addressLine1")],
-    ["city", t("cart.city")],
-    ["postalCode", t("cart.postalCode")],
-    ["country", t("cart.country")],
-    ["phone", t("cart.phone")],
+  const errors: ShippingFieldErrors = {};
+  const required: Array<[keyof ShippingForm, string, number]> = [
+    ["fullName", t("cart.fullName"), 2],
+    ["addressLine1", t("cart.addressLine1"), 3],
+    ["city", t("cart.city"), 2],
+    ["postalCode", t("cart.postalCode"), 2],
+    ["country", t("cart.country"), 2],
+    ["phone", t("cart.phone"), 5],
+  ];
+  const maxLengths: Array<[keyof ShippingForm, string, number]> = [
+    ["fullName", t("cart.fullName"), 120],
+    ["company", t("cart.company"), 120],
+    ["addressLine1", t("cart.addressLine1"), 180],
+    ["addressLine2", t("cart.addressLine2"), 180],
+    ["city", t("cart.city"), 100],
+    ["region", t("cart.region"), 100],
+    ["postalCode", t("cart.postalCode"), 24],
+    ["country", t("cart.country"), 100],
+    ["phone", t("cart.phone"), 40],
+    ["pickupPoint", t("cart.pickupPoint"), 180],
+    ["instructions", t("cart.deliveryNotes"), 1000],
   ];
 
-  const missing = required.find(([field]) => !form[field].trim());
-  if (missing) return t("cart.requiredField", { field: missing[1] });
-  if (!shippingMethod) return t("cart.selectCourierError");
-  if (form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim())) return t("cart.invalidEmail");
-  return null;
+  for (const [field, label, minLength] of required) {
+    const value = form[field].trim();
+    if (!value) {
+      errors[field] = t("cart.requiredField", { field: label });
+    } else if (value.length < minLength) {
+      errors[field] = t("cart.fieldTooShort", { field: label, min: minLength });
+    }
+  }
+
+  for (const [field, label, maxLength] of maxLengths) {
+    if (!errors[field] && form[field].trim().length > maxLength) {
+      errors[field] = t("cart.fieldTooLong", { field: label, max: maxLength });
+    }
+  }
+
+  if (!shippingMethod) errors.shippingMethod = t("cart.selectCourierError");
+  if (form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim())) errors.email = t("cart.invalidEmail");
+  return errors;
+}
+
+function isValidOrderItem(item: CartItem) {
+  return UUID_PATTERN.test(item.product.id) && Boolean(item.tier.id && UUID_PATTERN.test(item.tier.id));
 }
 
 function toShippingPayload(form: ShippingForm, shippingMethod?: ApiShippingMethod) {

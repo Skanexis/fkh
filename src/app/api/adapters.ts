@@ -23,7 +23,7 @@ export function toProduct(apiProduct: ApiProduct): Product {
     category: apiProduct.category.name,
     description: apiProduct.description,
     longDescription: apiProduct.longDescription,
-    images: imagePreviews.length ? imagePreviews : [""],
+    images: imagePreviews,
     media,
     priceTiers: apiProduct.priceTiers.map((tier) => ({
       id: tier.id,

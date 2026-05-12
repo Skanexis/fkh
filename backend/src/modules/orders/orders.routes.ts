@@ -8,26 +8,34 @@ import { env } from "../../config/env.js";
 import { prisma } from "../../db/prisma.js";
 import { sendTelegramJson } from "../telegram/telegram.service.js";
 
+const requiredText = (min: number, max: number) => z.string().trim().min(min).max(max);
+const optionalText = (max: number) => z.preprocess(emptyToUndefined, z.string().trim().max(max).optional());
+const optionalEmail = z.preprocess(emptyToUndefined, z.string().trim().email().optional());
+const optionalPhone = z.preprocess(emptyToUndefined, z.string().trim().min(5).max(40).optional());
+
 const createOrderBody = z.object({
-  customerComment: z.string().max(1000).optional(),
-  customerEmail: z.string().email().optional(),
-  customerPhone: z.string().min(5).max(40).optional(),
+  customerComment: optionalText(1000),
+  customerEmail: optionalEmail,
+  customerPhone: optionalPhone,
   shipping: z.object({
     methodId: z.string().uuid(),
-    fullName: z.string().min(2).max(120),
-    company: z.string().max(120).optional(),
-    addressLine1: z.string().min(3).max(180),
-    addressLine2: z.string().max(180).optional(),
-    city: z.string().min(2).max(100),
-    region: z.string().max(100).optional(),
-    postalCode: z.string().min(2).max(24),
-    country: z.string().min(2).max(100),
-    countryCode: z.string().min(2).max(2).transform((value) => value.toUpperCase()).optional(),
-    phone: z.string().min(5).max(40),
-    email: z.string().email().optional(),
-    taxId: z.string().max(80).optional(),
-    pickupPoint: z.string().max(180).optional(),
-    instructions: z.string().max(1000).optional(),
+    fullName: requiredText(2, 120),
+    company: optionalText(120),
+    addressLine1: requiredText(3, 180),
+    addressLine2: optionalText(180),
+    city: requiredText(2, 100),
+    region: optionalText(100),
+    postalCode: requiredText(2, 24),
+    country: requiredText(2, 100),
+    countryCode: z.preprocess(
+      emptyToUndefined,
+      z.string().trim().length(2).transform((value) => value.toUpperCase()).optional(),
+    ),
+    phone: requiredText(5, 40),
+    email: optionalEmail,
+    taxId: optionalText(80),
+    pickupPoint: optionalText(180),
+    instructions: optionalText(1000),
   }),
   items: z
     .array(
@@ -40,6 +48,10 @@ const createOrderBody = z.object({
     .min(1)
     .max(50),
 });
+
+function emptyToUndefined(value: unknown) {
+  return typeof value === "string" && value.trim() === "" ? undefined : value;
+}
 
 export async function registerOrderRoutes(app: FastifyInstance) {
   app.post("/api/v1/orders", async (request) => {

@@ -6,6 +6,7 @@ import { Product, ProductMedia } from "../data/products";
 import { useCart } from "../store/cart-context";
 import { TopBar } from "../components/TopBar";
 import { ProductMediaPlayer } from "../components/ProductMediaPlayer";
+import { ProductImagePlaceholder } from "../components/ProductImagePlaceholder";
 import { useAuth } from "../auth/auth-context";
 import { apiRequest } from "../api/client";
 import { ApiProduct, ApiProductReview } from "../api/types";
@@ -145,12 +146,14 @@ export function ProductDetail() {
           >
             {activeMedia.type === "video" ? (
               <ProductMediaPlayer media={activeMedia} title={product.name} />
-            ) : (
+            ) : activeMedia.url ? (
               <img
                 src={activeMedia.url}
                 alt={activeMedia.alt ?? product.name}
                 className="absolute inset-0 w-full h-full object-cover"
               />
+            ) : (
+              <ProductImagePlaceholder className="absolute inset-0" iconSize={54} />
             )}
           </motion.div>
         </AnimatePresence>
