@@ -249,10 +249,63 @@ model Order {
   cancelledAt              DateTime?
   user                     User        @relation(fields: [userId], references: [id])
   items                    OrderItem[]
+  cryptoPayment            CryptoPayment?
 
   @@index([userId])
   @@index([status])
   @@index([createdAt])
+}
+
+model CryptoPayment {
+  id                  String   @id @default(uuid())
+  orderId             String   @unique
+  provider            String   @default("self_custody")
+  providerPaymentId   String?  @unique
+  providerPurchaseId  String?
+  providerStatus      String   @default("created")
+  currencyCode        String
+  currencyLabel       String
+  providerCurrency    String
+  network             String
+  priceAmount         Decimal  @db.Decimal(10, 2)
+  priceCurrency       String   @default("EUR")
+  payAmount           Decimal? @db.Decimal(28, 12)
+  payAddress          String?
+  payinExtraId        String?
+  actuallyPaid        Decimal? @db.Decimal(28, 12)
+  outcomeAmount       Decimal? @db.Decimal(28, 12)
+  outcomeCurrency     String?
+  paidAt              DateTime?
+  expiresAt           DateTime?
+  rawProviderPayload  Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  order               Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  transactions        CryptoPaymentTransaction[]
+
+  @@index([provider])
+  @@index([providerStatus])
+  @@index([payAddress])
+  @@index([createdAt])
+}
+
+model CryptoPaymentTransaction {
+  id              String        @id @default(uuid())
+  cryptoPaymentId String
+  chain           String
+  asset           String
+  txHash          String
+  outputIndex     Int           @default(0)
+  amount          Decimal       @db.Decimal(28, 12)
+  confirmations   Int           @default(0)
+  confirmedAt     DateTime?
+  rawPayload      Json?
+  createdAt       DateTime      @default(now())
+  payment         CryptoPayment @relation(fields: [cryptoPaymentId], references: [id], onDelete: Cascade)
+
+  @@unique([chain, asset, txHash, outputIndex])
+  @@index([cryptoPaymentId])
+  @@index([txHash])
 }
 
 model OrderItem {

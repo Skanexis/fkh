@@ -62,5 +62,6 @@ export function toProfileOrder(order: ApiOrder) {
       qty: item.quantity,
     })),
     total: order.totalAmount,
+    payment: order.payment,
   };
 }

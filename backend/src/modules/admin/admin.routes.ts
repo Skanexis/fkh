@@ -74,6 +74,10 @@ const orderQuery = pagingQuery.extend({
   dateTo: z.coerce.date().optional(),
 });
 
+const paymentQuery = pagingQuery.extend({
+  status: z.string().trim().min(1).max(40).optional(),
+});
+
 const siteSettingsPayload = z.object({
   brandName: z.string().min(1).max(80).optional(),
   logoUrl: z.string().url().nullable().optional(),
@@ -99,24 +103,51 @@ const orderTrackingPayload = z.object({
   ),
 });
 
+const paidOrderStatuses: OrderStatus[] = [OrderStatus.accepted, OrderStatus.completed];
+
 export async function registerAdminRoutes(app: FastifyInstance) {
   app.get("/api/v1/admin/dashboard", async (request) => {
     await requireAdmin(request);
 
-    const [totalOrders, totalUsers, pendingOrders, completedOrders, ordersByStatus, recentOrders] = await prisma.$transaction([
+    const [totalOrders, totalUsers, pendingOrders, paidOrders, ordersByStatus, recentOrders, cryptoPayments] = await prisma.$transaction([
       prisma.order.count(),
       prisma.user.count(),
       prisma.order.count({ where: { status: "pending" } }),
-      prisma.order.findMany({ where: { status: "completed" }, select: { totalAmount: true } }),
+      prisma.order.findMany({
+        where: { status: { in: paidOrderStatuses } },
+        select: {
+          totalAmount: true,
+          createdAt: true,
+          customerName: true,
+          publicId: true,
+          user: { select: { id: true, name: true, telegramUsername: true, telegramId: true } },
+        },
+      }),
       prisma.order.groupBy({ by: ["status"], _count: true, orderBy: { status: "asc" } }),
-      prisma.order.findMany({ orderBy: { createdAt: "desc" }, take: 8, include: { items: true } }),
+      prisma.order.findMany({ orderBy: { createdAt: "desc" }, take: 8, include: { items: true, cryptoPayment: true } }),
+      prisma.cryptoPayment.findMany({
+        orderBy: { createdAt: "desc" },
+        include: {
+          order: {
+            select: {
+              id: true,
+              publicId: true,
+              customerName: true,
+              status: true,
+              totalAmount: true,
+              currency: true,
+              createdAt: true,
+            },
+          },
+        },
+      }),
     ]);
 
     const grouped = Object.fromEntries(ordersByStatus.map((item) => [item.status, item._count]));
 
     return {
       data: {
-        totalRevenue: completedOrders.reduce((sum, order) => sum + money(order.totalAmount), 0),
+        totalRevenue: paidOrders.reduce((sum, order) => sum + money(order.totalAmount), 0),
         totalOrders,
         totalUsers,
         pendingOrders,
@@ -127,6 +158,9 @@ export async function registerAdminRoutes(app: FastifyInstance) {
           cancelled: grouped.cancelled ?? 0,
         },
         recentOrders: recentOrders.map(serializeOrder),
+        monthlyRevenue: buildMonthlyRevenue(paidOrders),
+        topCustomers: buildTopCustomers(paidOrders),
+        paymentStats: buildPaymentStats(cryptoPayments),
       },
     };
   });
@@ -234,7 +268,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         orderBy: { createdAt: "desc" },
         skip: (query.data.page - 1) * query.data.limit,
         take: query.data.limit,
-        include: { items: true },
+        include: { items: true, cryptoPayment: true },
       }),
     ]);
 
@@ -244,9 +278,51 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.get("/api/v1/admin/orders/:id", async (request) => {
     await requireAdmin(request);
     const id = parseId(request);
-    const order = await prisma.order.findUnique({ where: { id }, include: { items: true } });
+    const order = await prisma.order.findUnique({ where: { id }, include: { items: true, cryptoPayment: true } });
     if (!order) throw notFound("Order not found");
     return { data: serializeOrder(order) };
+  });
+
+  app.get("/api/v1/admin/payments", async (request) => {
+    await requireAdmin(request);
+    const query = paymentQuery.safeParse(request.query);
+    if (!query.success) throw badRequest("Invalid payment query", query.error.flatten());
+
+    const where = {
+      providerStatus: query.data.status,
+      OR: query.data.search
+        ? [
+            { providerPaymentId: { contains: query.data.search, mode: "insensitive" as const } },
+            { currencyCode: { contains: query.data.search, mode: "insensitive" as const } },
+            { currencyLabel: { contains: query.data.search, mode: "insensitive" as const } },
+            { network: { contains: query.data.search, mode: "insensitive" as const } },
+            { payAddress: { contains: query.data.search, mode: "insensitive" as const } },
+            { order: { publicId: { contains: query.data.search, mode: "insensitive" as const } } },
+            { order: { customerName: { contains: query.data.search, mode: "insensitive" as const } } },
+            { order: { telegramIdSnapshot: { contains: query.data.search, mode: "insensitive" as const } } },
+            { order: { telegramUsernameSnapshot: { contains: query.data.search, mode: "insensitive" as const } } },
+          ]
+        : undefined,
+    };
+
+    const [total, payments] = await prisma.$transaction([
+      prisma.cryptoPayment.count({ where }),
+      prisma.cryptoPayment.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (query.data.page - 1) * query.data.limit,
+        take: query.data.limit,
+        include: { order: { include: { items: true, cryptoPayment: true } } },
+      }),
+    ]);
+
+    return {
+      data: payments.map((payment) => ({
+        ...serializeAdminPayment(payment),
+        order: serializeOrder(payment.order),
+      })),
+      meta: pageMeta(query.data.page, query.data.limit, total),
+    };
   });
 
   app.patch("/api/v1/admin/orders/:id/status", async (request) => {
@@ -268,7 +344,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         completedAt: body.data.status === "completed" ? now : before.completedAt,
         cancelledAt: body.data.status === "cancelled" ? now : before.cancelledAt,
       },
-      include: { items: true },
+      include: { items: true, cryptoPayment: true },
     });
     await audit(request, admin.id, "order.status_update", "Order", id, before, order);
 
@@ -315,7 +391,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         trackingMessage: body.data.message ?? null,
         trackingSentAt: now,
       },
-      include: { items: true },
+      include: { items: true, cryptoPayment: true },
     });
     await audit(request, admin.id, "order.tracking_sent", "Order", id, before, order);
 
@@ -331,7 +407,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     const order = await prisma.order.update({
       where: { id },
       data: { adminComment: body.data.adminComment },
-      include: { items: true },
+      include: { items: true, cryptoPayment: true },
     });
     await audit(request, admin.id, "order.comment_update", "Order", id, null, order);
     return { data: serializeOrder(order) };
@@ -359,21 +435,32 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         orderBy: { createdAt: "desc" },
         skip: (query.data.page - 1) * query.data.limit,
         take: query.data.limit,
-        include: { orders: { select: { totalAmount: true, status: true } } },
+        include: {
+          orders: {
+            select: {
+              totalAmount: true,
+              status: true,
+              cryptoPayment: true,
+            },
+          },
+        },
       }),
     ]);
 
     return {
-      data: users.map((user) => ({
-        ...serializeAuthUser(user),
-        email: user.email,
-        phone: user.phone,
-        createdAt: user.createdAt.toISOString(),
-        orderCount: user.orders.length,
-        spent: user.orders
-          .filter((order) => order.status === "completed")
-          .reduce((sum, order) => sum + money(order.totalAmount), 0),
-      })),
+      data: users.map((user) => {
+        const paidOrders = user.orders.filter((order) => paidOrderStatuses.includes(order.status));
+        return {
+          ...serializeAuthUser(user),
+          email: user.email,
+          phone: user.phone,
+          createdAt: user.createdAt.toISOString(),
+          orderCount: user.orders.length,
+          paidOrderCount: paidOrders.length,
+          spent: paidOrders.reduce((sum, order) => sum + money(order.totalAmount), 0),
+          paymentCurrencies: buildUserPaymentCurrencies(paidOrders),
+        };
+      }),
       meta: pageMeta(query.data.page, query.data.limit, total),
     };
   });
@@ -520,6 +607,223 @@ const productInclude = {
   media: { orderBy: { sortOrder: "asc" as const } },
   priceTiers: { orderBy: { sortOrder: "asc" as const } },
 };
+
+function buildMonthlyRevenue(orders: Array<{ totalAmount: unknown; createdAt: Date }>) {
+  const currentYear = new Date().getFullYear();
+  const monthKeys = [
+    "month.jan",
+    "month.feb",
+    "month.mar",
+    "month.apr",
+    "month.may",
+    "month.jun",
+    "month.jul",
+    "month.aug",
+    "month.sep",
+    "month.oct",
+    "month.nov",
+    "month.dec",
+  ];
+  const totals = Array.from({ length: 12 }, () => 0);
+  for (const order of orders) {
+    if (order.createdAt.getFullYear() !== currentYear) continue;
+    totals[order.createdAt.getMonth()] += money(order.totalAmount as any);
+  }
+  return monthKeys.map((monthKey, index) => ({
+    monthKey,
+    value: Number(totals[index].toFixed(2)),
+  }));
+}
+
+function buildTopCustomers(orders: Array<{
+  totalAmount: unknown;
+  customerName: string;
+  publicId: string;
+  user?: { id: string; name: string; telegramUsername: string | null; telegramId: string } | null;
+}>) {
+  const grouped = new Map<string, {
+    id: string;
+    name: string;
+    telegramUsername: string | null;
+    telegramId: string | null;
+    orderCount: number;
+    spent: number;
+    lastOrderPublicId: string;
+  }>();
+
+  for (const order of orders) {
+    const id = order.user?.id ?? order.customerName;
+    const current = grouped.get(id) ?? {
+      id,
+      name: order.user?.name ?? order.customerName,
+      telegramUsername: order.user?.telegramUsername ?? null,
+      telegramId: order.user?.telegramId ?? null,
+      orderCount: 0,
+      spent: 0,
+      lastOrderPublicId: order.publicId,
+    };
+    current.orderCount += 1;
+    current.spent += money(order.totalAmount as any);
+    current.lastOrderPublicId = order.publicId;
+    grouped.set(id, current);
+  }
+
+  return Array.from(grouped.values())
+    .map((item) => ({ ...item, spent: Number(item.spent.toFixed(2)) }))
+    .sort((a, b) => b.spent - a.spent)
+    .slice(0, 5);
+}
+
+function buildPaymentStats(payments: any[]) {
+  const byCurrency = new Map<string, any>();
+  let totalExpectedRevenue = 0;
+  let paidRevenue = 0;
+  let totalReceivedCrypto = 0;
+  let totalPendingCrypto = 0;
+
+  for (const payment of payments) {
+    const expectedFiat = money(payment.priceAmount);
+    const receivedCrypto = decimalNumber(payment.actuallyPaid);
+    const pendingCrypto = pendingCryptoAmount(payment);
+    const key = `${payment.currencyCode}:${payment.network}`;
+    const current = byCurrency.get(key) ?? {
+      currencyCode: payment.currencyCode,
+      currencyLabel: payment.currencyLabel,
+      providerCurrency: payment.providerCurrency,
+      network: payment.network,
+      count: 0,
+      paidCount: 0,
+      pendingCount: 0,
+      partialCount: 0,
+      expiredCount: 0,
+      expectedFiat: 0,
+      paidFiat: 0,
+      receivedCrypto: 0,
+      pendingCrypto: 0,
+    };
+
+    current.count += 1;
+    current.expectedFiat += expectedFiat;
+    current.receivedCrypto += receivedCrypto;
+    current.pendingCrypto += pendingCrypto;
+    if (payment.providerStatus === "finished") {
+      current.paidCount += 1;
+      current.paidFiat += expectedFiat;
+      paidRevenue += expectedFiat;
+    } else if (payment.providerStatus === "partially_paid") {
+      current.partialCount += 1;
+    } else if (payment.providerStatus === "expired") {
+      current.expiredCount += 1;
+    } else if (["waiting", "confirming"].includes(payment.providerStatus)) {
+      current.pendingCount += 1;
+    }
+
+    totalExpectedRevenue += expectedFiat;
+    totalReceivedCrypto += receivedCrypto;
+    totalPendingCrypto += pendingCrypto;
+    byCurrency.set(key, current);
+  }
+
+  const statuses = payments.reduce<Record<string, number>>((acc, payment) => {
+    acc[payment.providerStatus] = (acc[payment.providerStatus] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  return {
+    totalPayments: payments.length,
+    paidPayments: statuses.finished ?? 0,
+    pendingPayments: (statuses.waiting ?? 0) + (statuses.confirming ?? 0),
+    partialPayments: statuses.partially_paid ?? 0,
+    expiredPayments: statuses.expired ?? 0,
+    totalExpectedRevenue: Number(totalExpectedRevenue.toFixed(2)),
+    paidRevenue: Number(paidRevenue.toFixed(2)),
+    totalReceivedCrypto: Number(totalReceivedCrypto.toFixed(12)),
+    totalPendingCrypto: Number(totalPendingCrypto.toFixed(12)),
+    byCurrency: Array.from(byCurrency.values()).map((item) => ({
+      ...item,
+      expectedFiat: Number(item.expectedFiat.toFixed(2)),
+      paidFiat: Number(item.paidFiat.toFixed(2)),
+      receivedCrypto: Number(item.receivedCrypto.toFixed(12)),
+      pendingCrypto: Number(item.pendingCrypto.toFixed(12)),
+    })),
+  };
+}
+
+function buildUserPaymentCurrencies(orders: Array<{ totalAmount: unknown; cryptoPayment: any | null }>) {
+  const grouped = new Map<string, any>();
+  for (const order of orders) {
+    const payment = order.cryptoPayment;
+    if (!payment) continue;
+    const key = `${payment.currencyCode}:${payment.network}`;
+    const current = grouped.get(key) ?? {
+      currencyCode: payment.currencyCode,
+      currencyLabel: payment.currencyLabel,
+      providerCurrency: payment.providerCurrency,
+      network: payment.network,
+      orderCount: 0,
+      spent: 0,
+      receivedCrypto: 0,
+    };
+    current.orderCount += 1;
+    current.spent += money(order.totalAmount as any);
+    current.receivedCrypto += decimalNumber(payment.actuallyPaid);
+    grouped.set(key, current);
+  }
+  return Array.from(grouped.values()).map((item) => ({
+    ...item,
+    spent: Number(item.spent.toFixed(2)),
+    receivedCrypto: Number(item.receivedCrypto.toFixed(12)),
+  }));
+}
+
+function serializeAdminPayment(payment: any) {
+  const remainingAmount = remainingCryptoAmount(payment);
+  return {
+    id: payment.id,
+    provider: payment.provider,
+    providerPaymentId: payment.providerPaymentId,
+    providerStatus: payment.providerStatus,
+    currencyCode: payment.currencyCode,
+    currencyLabel: payment.currencyLabel,
+    providerCurrency: payment.providerCurrency,
+    network: payment.network,
+    priceAmount: money(payment.priceAmount),
+    priceCurrency: payment.priceCurrency,
+    payAmount: nullableDecimalNumber(payment.payAmount),
+    payAddress: payment.payAddress,
+    payinExtraId: payment.payinExtraId,
+    actuallyPaid: nullableDecimalNumber(payment.actuallyPaid),
+    pendingAmount: pendingCryptoAmount(payment),
+    remainingAmount,
+    isUnderpaid: remainingAmount !== null && remainingAmount > 0 && payment.providerStatus === "partially_paid",
+    paidAt: payment.paidAt?.toISOString() ?? null,
+    expiresAt: payment.expiresAt?.toISOString() ?? null,
+    createdAt: payment.createdAt.toISOString(),
+    updatedAt: payment.updatedAt.toISOString(),
+  };
+}
+
+function pendingCryptoAmount(payment: any) {
+  const raw = typeof payment.rawProviderPayload === "object" && payment.rawProviderPayload ? payment.rawProviderPayload : null;
+  const value = raw && "lastPendingReceived" in raw ? Number(raw.lastPendingReceived) : 0;
+  return Number.isFinite(value) && value > 0 ? Number(value.toFixed(12)) : 0;
+}
+
+function remainingCryptoAmount(payment: any) {
+  if (payment.payAmount === null || payment.payAmount === undefined) return null;
+  const remaining = Number(payment.payAmount) - decimalNumber(payment.actuallyPaid);
+  return remaining > 0 ? Number(remaining.toFixed(12)) : 0;
+}
+
+function nullableDecimalNumber(value: unknown) {
+  if (value === null || value === undefined) return null;
+  return decimalNumber(value);
+}
+
+function decimalNumber(value: unknown) {
+  const numberValue = Number(value ?? 0);
+  return Number.isFinite(numberValue) ? numberValue : 0;
+}
 
 async function upsertProduct(productId: string | null, payload: Partial<z.infer<typeof productPayload>>) {
   const slug = payload.slug ?? (payload.name ? slugify(payload.name) : undefined);

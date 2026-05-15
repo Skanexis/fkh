@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Clock, Package, CheckCircle, Search, X, MapPin, Truck, Phone, Mail, Send } from "lucide-react";
+import { Clock, Package, CheckCircle, Search, X, MapPin, Truck, Phone, Mail, Send, WalletCards, AlertTriangle } from "lucide-react";
 import { apiRequest } from "../../api/client";
 import { ApiOrder } from "../../api/types";
 import { useI18n } from "../../i18n";
 
-type OrderStatus = "pending" | "accepted" | "completed";
+type OrderStatus = "pending" | "accepted" | "completed" | "cancelled";
 
 interface AdminOrder {
   id: string;
@@ -20,12 +20,14 @@ interface AdminOrder {
   customerPhone?: string | null;
   shipping?: ApiOrder["shipping"];
   tracking?: ApiOrder["tracking"];
+  payment?: ApiOrder["payment"];
 }
 
 const STATUS_CONFIG = {
   pending: { labelKey: "status.pending", color: "#FF4D6D", bg: "rgba(255,77,109,0.12)", icon: Clock },
   accepted: { labelKey: "status.accepted", color: "#3B82F6", bg: "rgba(59,130,246,0.12)", icon: Package },
   completed: { labelKey: "status.completed", color: "#22c55e", bg: "rgba(34,197,94,0.12)", icon: CheckCircle },
+  cancelled: { labelKey: "status.cancelled", color: "#ef4444", bg: "rgba(239,68,68,0.12)", icon: AlertTriangle },
 };
 
 export function AdminOrders() {
@@ -62,8 +64,10 @@ export function AdminOrders() {
 
   const filtered = orders.filter((o) => {
     const matchSearch =
-      o.id.toLowerCase().includes(search.toLowerCase()) ||
-      o.user.toLowerCase().includes(search.toLowerCase());
+      o.publicId.toLowerCase().includes(search.toLowerCase()) ||
+      o.user.toLowerCase().includes(search.toLowerCase()) ||
+      (o.payment?.currencyLabel ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (o.payment?.payAddress ?? "").toLowerCase().includes(search.toLowerCase());
     const matchStatus = filterStatus === "all" || o.status === filterStatus;
     return matchSearch && matchStatus;
   });
@@ -113,6 +117,7 @@ export function AdminOrders() {
     pending: orders.filter((o) => o.status === "pending").length,
     accepted: orders.filter((o) => o.status === "accepted").length,
     completed: orders.filter((o) => o.status === "completed").length,
+    cancelled: orders.filter((o) => o.status === "cancelled").length,
   };
 
   return (
@@ -130,7 +135,7 @@ export function AdminOrders() {
       </motion.div>
 
       {/* Status summary */}
-      <div className="grid grid-cols-3 gap-3 mb-5">
+      <div className="grid grid-cols-4 gap-3 mb-5">
         {(Object.keys(STATUS_CONFIG) as OrderStatus[]).map((status) => {
           const cfg = STATUS_CONFIG[status];
           const Icon = cfg.icon;
@@ -204,6 +209,11 @@ export function AdminOrders() {
                 <div>
                   <p style={{ color: "#9CA3AF", fontSize: 12 }}>{order.user}</p>
                   <p style={{ color: "#6B7280", fontSize: 11, marginTop: 1 }}>{order.product}</p>
+                  {order.payment && (
+                    <p style={{ color: "#60A5FA", fontSize: 11, marginTop: 3 }}>
+                      {order.payment.currencyLabel} · {paymentStatusLabel(order.payment.providerStatus)} · received {formatCrypto(order.payment.actuallyPaid)} {order.payment.providerCurrency.toUpperCase()}
+                    </p>
+                  )}
                 </div>
                 <span style={{ color: "#6B7280", fontSize: 11 }}>
                   {new Date(order.date).toLocaleDateString(locale)}
@@ -273,6 +283,39 @@ export function AdminOrders() {
                     €{selectedOrder.total}
                   </span>
                 </div>
+
+                {selectedOrder.payment && (
+                  <div
+                    className="rounded-xl p-3 mb-5"
+                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
+                  >
+                    <div className="flex items-center gap-2 mb-3">
+                      <WalletCards size={15} color="#3B82F6" />
+                      <p style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 13 }}>Payment</p>
+                      <span
+                        className="px-2 py-0.5 rounded-full"
+                        style={{
+                          background: paymentStatusBg(selectedOrder.payment.providerStatus),
+                          color: paymentStatusColor(selectedOrder.payment.providerStatus),
+                          fontSize: 10,
+                          fontWeight: 800,
+                        }}
+                      >
+                        {paymentStatusLabel(selectedOrder.payment.providerStatus)}
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      <DeliveryLine label="Asset" value={`${selectedOrder.payment.currencyLabel} (${selectedOrder.payment.network})`} />
+                      <DeliveryLine label="Expected" value={`${formatCrypto(selectedOrder.payment.payAmount)} ${selectedOrder.payment.providerCurrency.toUpperCase()}`} />
+                      <DeliveryLine label="Confirmed" value={`${formatCrypto(selectedOrder.payment.actuallyPaid)} ${selectedOrder.payment.providerCurrency.toUpperCase()}`} />
+                      <DeliveryLine label="Pending" value={`${formatCrypto(selectedOrder.payment.pendingAmount)} ${selectedOrder.payment.providerCurrency.toUpperCase()}`} />
+                      <DeliveryLine label="Remaining" value={`${formatCrypto(selectedOrder.payment.remainingAmount)} ${selectedOrder.payment.providerCurrency.toUpperCase()}`} />
+                      <DeliveryLine label="Address" value={selectedOrder.payment.payAddress} />
+                      <DeliveryLine label="Payment ID" value={selectedOrder.payment.providerPaymentId} />
+                      <DeliveryLine label="Paid at" value={selectedOrder.payment.paidAt ? new Date(selectedOrder.payment.paidAt).toLocaleString(locale) : undefined} />
+                    </div>
+                  </div>
+                )}
 
                 <div
                   className="rounded-xl p-3 mb-5"
@@ -405,12 +448,13 @@ function toAdminOrder(order: ApiOrder): AdminOrder {
     user: order.customerName,
     product: order.items.map((item) => `${item.productName} ${item.priceTierLabel}`).join(", "),
     total: order.totalAmount,
-    status: order.status === "cancelled" ? "completed" : order.status,
+    status: order.status,
     date: order.createdAt,
     customerEmail: order.customerEmail,
     customerPhone: order.customerPhone,
     shipping: order.shipping,
     tracking: order.tracking,
+    payment: order.payment,
   };
 }
 
@@ -440,4 +484,40 @@ function formatAddress(shipping: ApiOrder["shipping"]) {
   const cityLine = [shipping.postalCode, shipping.city, shipping.region].filter(Boolean).join(" ");
   const countryLine = [shipping.country, shipping.countryCode ? `(${shipping.countryCode})` : null].filter(Boolean).join(" ");
   return [shipping.addressLine1, shipping.addressLine2, cityLine, countryLine].filter(Boolean).join("\n");
+}
+
+function paymentStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    waiting: "waiting",
+    confirming: "confirming",
+    partially_paid: "partial",
+    finished: "paid",
+    expired: "expired",
+    failed: "failed",
+  };
+  return labels[status] ?? status;
+}
+
+function paymentStatusColor(status: string) {
+  if (status === "finished") return "#22c55e";
+  if (status === "partially_paid") return "#F97316";
+  if (status === "expired") return "#6B7280";
+  if (status === "failed") return "#ef4444";
+  return "#3B82F6";
+}
+
+function paymentStatusBg(status: string) {
+  if (status === "finished") return "rgba(34,197,94,0.12)";
+  if (status === "partially_paid") return "rgba(249,115,22,0.12)";
+  if (status === "expired") return "rgba(107,114,128,0.12)";
+  if (status === "failed") return "rgba(239,68,68,0.12)";
+  return "rgba(59,130,246,0.12)";
+}
+
+function formatCrypto(value?: number | null) {
+  if (value === null || value === undefined) return "0";
+  return Number(value).toLocaleString("en-US", {
+    maximumFractionDigits: 12,
+    useGrouping: false,
+  });
 }

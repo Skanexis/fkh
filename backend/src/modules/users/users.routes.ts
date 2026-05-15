@@ -37,7 +37,7 @@ export async function registerUserRoutes(app: FastifyInstance) {
     const orders = await prisma.order.findMany({
       where: { userId: authUser.id },
       orderBy: { createdAt: "desc" },
-      include: { items: true },
+      include: { items: true, cryptoPayment: true },
     });
     return { data: orders.map(serializeOrder) };
   });
@@ -49,7 +49,7 @@ export async function registerUserRoutes(app: FastifyInstance) {
 
     const order = await prisma.order.findFirst({
       where: { publicId: params.data.publicId, userId: authUser.id },
-      include: { items: true },
+      include: { items: true, cryptoPayment: true },
     });
 
     if (!order) throw notFound("Order not found");

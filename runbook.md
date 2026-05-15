@@ -120,7 +120,7 @@ Connect local repository:
 
 ```bash
 git remote add origin git@github.com:YOUR_GITHUB_USER/fkh.git
-git branch -M main
+git branch -M main    
 git push -u origin main
 ```
 
@@ -303,7 +303,7 @@ Clone the repo:
 ```bash
 mkdir -p ~/apps
 cd ~/apps
-git clone git@github.com:YOUR_GITHUB_USER/fkh.git
+git clone git@github.com:Skanexis/fkh.git
 cd fkh
 ```
 
@@ -433,13 +433,13 @@ Because this project currently uses Prisma `db push` rather than committed migra
 docker compose --env-file .env.production -f docker-compose.prod.yml exec backend npm run db:push
 ```
 
-Seed starter catalog, contacts, shipping methods, and admin users from env:
+Seed initial catalog data:
 
 ```bash
 docker compose --env-file .env.production -f docker-compose.prod.yml exec backend npm run db:seed
 ```
 
-The seed uses upsert for starter data. It archives the old demo products and keeps existing orders intact.
+Use seed only when you want the demo catalog/admin seed data. If the database already contains production data, do not re-run seed unless you understand what it upserts.
 
 ## 17. Verify Local Container Ports On VPS
 
@@ -464,7 +464,7 @@ If this works, Docker is good. Next step is host Nginx.
 Create a new Nginx site. Do not edit existing sites unless you know they are unused.
 
 ```bash
-sudo nano /etc/nginx/sites-available/fkh.your-domain.com
+sudo nano /etc/nginx/sites-available/the-fkh.eu
 ```
 
 Paste:
@@ -473,7 +473,7 @@ Paste:
 server {
     listen 80;
     listen [::]:80;
-    server_name fkh.your-domain.com;
+    server_name the-fkh.eu;
 
     client_max_body_size 25m;
 
@@ -518,7 +518,7 @@ server {
 Enable the site:
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/fkh.your-domain.com /etc/nginx/sites-enabled/fkh.your-domain.com
+sudo ln -s /etc/nginx/sites-available/the-fkh.eu /etc/nginx/sites-enabled/the-fkh.eu
 ```
 
 Test Nginx:
@@ -552,7 +552,7 @@ sudo apt install -y certbot python3-certbot-nginx
 Issue certificate:
 
 ```bash
-sudo certbot --nginx -d fkh.your-domain.com
+sudo certbot --nginx -d the-fkh.eu
 ```
 
 Choose redirect HTTP to HTTPS when prompted.
@@ -652,7 +652,6 @@ git pull --ff-only
 docker compose --env-file .env.production -f docker-compose.prod.yml build
 docker compose --env-file .env.production -f docker-compose.prod.yml up -d
 docker compose --env-file .env.production -f docker-compose.prod.yml exec backend npm run db:push
-docker compose --env-file .env.production -f docker-compose.prod.yml exec backend npm run db:seed
 ```
 
 If frontend env changed, always rebuild frontend:
@@ -953,7 +952,442 @@ docker compose --env-file .env.production -f docker-compose.prod.yml down -v
 
 Use `down -v` only for disposable environments.
 
-## 31. Production Checklist
+## 31. Configure No-KYC Self-Custody Crypto Payments
+
+This project runs crypto payments without any custodial payment processor.
+
+Important architecture notes:
+
+- The VPS never stores your private keys, seed phrases, or exchange login data.
+- You add your own receiving addresses to `.env.production`.
+- The site assigns one free receiving address from the configured pool to each active invoice.
+- The backend quotes the crypto amount from CoinGecko, adds a tiny unique amount marker, and shows the customer the exact amount/address.
+- A backend watcher checks blockchains directly:
+  - BTC via mempool.space;
+  - USDT ERC-20 and USDC ERC-20 via Etherscan;
+  - USDT TRC-20 via TronGrid.
+- The backend confirms an order only when the watcher sees enough confirmed funds on that invoice address.
+- If the customer sends less than required, the order stays pending and the customer sees the remaining crypto amount to pay.
+- For BTC, the watcher can see unconfirmed mempool transactions and show them as pending, but it confirms the order only after the configured confirmation threshold.
+- Empty invoices expire automatically after `CRYPTO_PAYMENT_TTL_MINUTES` and release the wallet for future orders.
+
+Official docs:
+
+- CoinGecko Simple Price API: `https://docs.coingecko.com/reference/simple-price`
+- mempool.space API: `https://mempool.space/docs/api/rest`
+- Etherscan Account API: `https://docs.etherscan.io/api-reference/endpoint/tokentx`
+- TronGrid API: `https://developers.tron.network/reference/trc20-transaction-information-by-account-address`
+
+### 31.1 Create Your Wallet Address Pools
+
+Generate receiving addresses in wallets you control.
+
+Use separate address pools per asset/network:
+
+```text
+BTC address pool              -> native Bitcoin receive addresses
+USDT (ETH) address pool       -> Ethereum addresses that can receive USDT ERC-20
+USDT (TRON) address pool      -> TRON addresses that can receive USDT TRC-20
+USDC (ETH) address pool       -> Ethereum addresses that can receive USDC ERC-20
+```
+
+You can generate these addresses in wallets such as hardware wallets, Electrum for BTC, MetaMask-compatible Ethereum wallets, and TronLink-compatible TRON wallets. Use wallets you control.
+
+Never put private keys or seed phrases on the VPS. Only public receiving addresses go into `.env.production`.
+
+Recommended:
+
+- Generate at least 20 receiving addresses per busy currency.
+- For low volume, 3-5 addresses per currency is enough for testing.
+- The backend will not reuse an address while there is an active pending invoice on it.
+- After the active invoice is paid/confirmed or cancelled, the same address can be reused for a later invoice.
+- If you have only one address for a currency, you can accept only one active invoice for that currency at a time.
+- If all addresses for a currency are busy, checkout returns an error asking the customer to wait or asking you to add more receiving addresses.
+
+Use the exact network:
+
+- `USDT (ETH)` must be ERC-20 on Ethereum.
+- `USDT (TRON)` must be TRC-20 on TRON.
+- `USDC (ETH)` must be ERC-20 on Ethereum.
+- `BTC` must be Bitcoin mainnet.
+
+### 31.2 Create Explorer API Keys
+
+BTC can be checked through mempool.space without a key.
+
+For ERC-20 tokens, create an Etherscan API key:
+
+```text
+https://etherscan.io/apis
+```
+
+For TRON TRC-20, TronGrid may work without a key at low volume, but production should use a TronGrid API key:
+
+```text
+https://www.trongrid.io/
+```
+
+These are explorer API keys, not custodial payment accounts. They do not hold your money.
+
+### 31.3 Configure `.env.production`
+
+On the VPS:
+
+```bash
+cd ~/apps/fkh
+nano .env.production
+```
+
+Set these values:
+
+```env
+VITE_API_BASE_URL=https://the-fkh.eu
+PUBLIC_API_URL=https://the-fkh.eu
+CORS_ORIGINS=https://the-fkh.eu
+
+# Comma-separated address pools. Add your own public receiving addresses.
+CRYPTO_BTC_ADDRESSES=bc1qAddress1,bc1qAddress2,bc1qAddress3
+CRYPTO_USDT_ERC20_ADDRESSES=0xEthAddress1,0xEthAddress2,0xEthAddress3
+CRYPTO_USDT_TRC20_ADDRESSES=TTronAddress1,TTronAddress2,TTronAddress3
+CRYPTO_USDC_ERC20_ADDRESSES=0xEthAddress4,0xEthAddress5,0xEthAddress6
+
+CRYPTO_PAYMENT_TTL_MINUTES=120
+CRYPTO_BTC_PAYMENT_TTL_MINUTES=360
+CRYPTO_ETH_TOKEN_PAYMENT_TTL_MINUTES=90
+CRYPTO_TRON_PAYMENT_TTL_MINUTES=45
+CRYPTO_POLL_INTERVAL_SECONDS=60
+CRYPTO_BTC_CONFIRMATIONS=1
+CRYPTO_ETH_CONFIRMATIONS=12
+CRYPTO_TRON_CONFIRMATIONS=20
+
+COINGECKO_API_URL=https://api.coingecko.com/api/v3
+MEMPOOL_API_URL=https://mempool.space/api
+ETHERSCAN_API_URL=https://api.etherscan.io/v2/api
+ETHERSCAN_API_KEY=YOUR_ETHERSCAN_API_KEY
+TRONGRID_API_URL=https://api.trongrid.io
+TRONGRID_API_KEY=YOUR_TRONGRID_API_KEY
+
+ORDER_NOTIFICATIONS_ENABLED=true
+TELEGRAM_ADMIN_CHAT_ID=YOUR_ADMIN_CHAT_ID
+TELEGRAM_ADMIN_IDS=YOUR_TELEGRAM_USER_ID
+```
+
+Notes:
+
+- `PUBLIC_API_URL` must not be `localhost`.
+- `PUBLIC_API_URL` must not include `/api`.
+- Use HTTPS, not HTTP, in production.
+- `ORDER_NOTIFICATIONS_ENABLED=true` is required for admin Telegram order/payment notifications.
+- `TELEGRAM_ADMIN_CHAT_ID` is the chat where admin notifications are sent.
+- `TELEGRAM_ADMIN_IDS` controls which Telegram users can press admin inline buttons.
+
+### 31.4 Deploy Crypto Payment Changes
+
+From the VPS:
+
+```bash
+cd ~/apps/fkh
+git pull --ff-only
+docker compose --env-file .env.production -f docker-compose.prod.yml build
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d
+docker compose --env-file .env.production -f docker-compose.prod.yml exec backend npm run db:push
+```
+
+`db:push` is required because crypto payments add a `CryptoPayment` table.
+
+If you only changed `.env.production` after the containers were already built:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d --force-recreate backend
+```
+
+If you changed `VITE_API_BASE_URL`, rebuild frontend too:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml build frontend
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d frontend
+```
+
+### 31.5 Verify Backend Can See Crypto Settings
+
+Check health:
+
+```bash
+curl https://the-fkh.eu/health
+```
+
+Check public crypto methods:
+
+```bash
+curl https://the-fkh.eu/api/v1/payments/crypto/methods
+```
+
+Expected response includes:
+
+```json
+[
+  { "code": "btc", "label": "BTC", "network": "Bitcoin" },
+  { "code": "usdt_erc20", "label": "USDT (ETH)", "network": "Ethereum ERC-20" },
+  { "code": "usdt_trc20", "label": "USDT (TRON)", "network": "TRON TRC-20" },
+  { "code": "usdc_erc20", "label": "USDC (ETH)", "network": "Ethereum ERC-20" }
+]
+```
+
+Check backend logs:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml logs --tail=200 backend
+```
+
+There should be no env validation errors.
+
+### 31.7 Test A Real Order
+
+Use a small product/order amount first.
+
+1. Open the site.
+2. Log in with Telegram.
+3. Add product to cart.
+4. Fill delivery data.
+5. Select one crypto method.
+6. Confirm order.
+7. The site should show:
+   - order number,
+   - payment status,
+   - exact crypto amount,
+   - payment address,
+   - copy buttons.
+8. Send the exact amount from a wallet using the exact selected network.
+9. Wait for blockchain confirmations and backend watcher polling.
+10. The order should move from `Pending` to `Confirmed`.
+11. Admin Telegram chat should receive payment confirmation.
+
+Do not test USDT TRON by sending USDT ERC-20, and do not test USDT ERC-20 by sending USDT TRON. Wrong-network payments may be unrecoverable.
+
+### 31.8 How The System Avoids Mixing Transactions
+
+The system does not match payments by products or by EUR amount.
+
+It matches by self-custody invoice fields:
+
+- `payAddress`: the receiving address assigned to that active invoice.
+- `payAmount`: the exact crypto amount with a tiny unique marker.
+- `publicId`: our order ID such as `Order#123`.
+
+When the watcher runs:
+
+1. Backend checks active pending invoices.
+2. Backend reads confirmed blockchain transfers for the assigned address.
+3. Backend compares confirmed received amount with the exact invoice `payAmount`.
+4. If confirmed received amount is enough, the order becomes `Confirmed`.
+5. If confirmed received amount is lower, the order stays `Pending` and shows the remaining amount.
+
+This means two customers can buy the same products for the same amount at the same time only if your address pool has enough free addresses. They receive different invoice addresses. If you configured only one address for that currency, the second customer must wait until the first invoice is paid/confirmed or cancelled.
+
+Invoices that stay `Waiting` or `Confirming` past their TTL are marked `Expired` automatically by the backend watcher. Expired invoices no longer reserve the address. Invoices with confirmed partial payment stay `Partially paid` and keep reserving the address until the customer pays the remainder or an admin resolves the case manually.
+
+Recommended TTL values:
+
+```env
+CRYPTO_BTC_PAYMENT_TTL_MINUTES=360
+CRYPTO_ETH_TOKEN_PAYMENT_TTL_MINUTES=90
+CRYPTO_TRON_PAYMENT_TTL_MINUTES=45
+```
+
+`CRYPTO_PAYMENT_TTL_MINUTES` remains a fallback if a per-currency value is not set.
+
+The watcher records concrete blockchain transfers in the database:
+
+- `chain`
+- `asset`
+- `txHash`
+- `outputIndex` or token log index
+- `amount`
+- confirmations
+
+The unique database key is:
+
+```text
+chain + asset + txHash + outputIndex
+```
+
+So if the explorer returns the same transfer on every polling cycle, it is stored only once and cannot be counted twice. If the customer sends two separate identical transactions, they have different transaction hashes and both are counted.
+
+For BTC:
+
+- unconfirmed mempool transactions are stored with `confirmations=0`;
+- the invoice status becomes `Confirming` if a BTC transaction is visible but not confirmed yet;
+- the order is not moved to `Confirmed` until the transfer reaches `CRYPTO_BTC_CONFIRMATIONS`;
+- when the same tx later becomes confirmed, the existing transaction row is updated instead of inserted again.
+
+Residual limitation:
+
+- If a third party sends the correct amount to the exact active invoice address during the invoice window, blockchain data alone cannot prove which human sent it.
+- The practical protection is one active invoice per address, exact unique amount markers, short invoice TTL, transaction hash deduplication, and admin review for suspicious cases.
+
+### 31.9 What Happens If Customer Sends Too Little
+
+If blockchain watcher sees a confirmed incoming amount lower than the invoice amount:
+
+```text
+received < payAmount
+```
+
+then:
+
+- order stays `Pending`;
+- customer sees the received amount;
+- customer sees the remaining crypto amount to pay;
+- admin receives a Telegram warning;
+- order is not confirmed until confirmed received amount reaches the invoice amount.
+
+The customer should send the remaining amount using the same asset and network to the same invoice address while the invoice is still valid.
+
+### 31.10 What Happens If Customer Sends Wrong Coin Or Wrong Network
+
+The application cannot recover wrong-chain payments.
+
+Examples:
+
+- customer selected `USDT (TRON)` but sent `USDT ERC-20`;
+- customer selected `USDC (ETH)` but sent `USDT ERC-20`;
+- customer sent from an exchange that deducted withdrawal fees from the invoice amount.
+
+Expected result:
+
+- the watcher may not see a valid payment for the invoice;
+- the order stays pending;
+- admin must resolve it manually with the customer and wallet/exchange support.
+
+Operational rule:
+
+- Tell customers to copy the exact amount and exact network from the invoice screen.
+- For exchange withdrawals, customer must account for exchange withdrawal fees so the invoice receives the full amount.
+
+### 31.11 Add Or Change Wallets Later
+
+To change receiving addresses:
+
+1. Generate new public receiving addresses in your wallet.
+2. Open `.env.production`.
+3. Add the addresses to the correct comma-separated env variable.
+4. Recreate backend.
+5. Create a small test order.
+6. Verify that payment detection works.
+
+Example:
+
+```bash
+nano .env.production
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d --force-recreate backend
+```
+
+No code change is needed if you are still using the supported currencies:
+
+```text
+BTC
+USDT ERC-20
+USDT TRC-20
+USDC ERC-20
+```
+
+If you want to add a new coin later, code changes are needed in:
+
+- `backend/src/modules/payments/crypto-payments.service.ts`
+- `src/app/pages/Cart.tsx` only if you want a frontend fallback before backend loads methods
+
+### 31.12 Crypto Payment Troubleshooting
+
+#### Checkout says payment addresses are not configured or address pool is busy
+
+Check:
+
+```bash
+grep CRYPTO_ .env.production
+docker compose --env-file .env.production -f docker-compose.prod.yml config | grep CRYPTO_
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d --force-recreate backend
+```
+
+At least one address must be set for every currency you want to accept. With one address, only one active invoice for that currency can exist at a time. Add more addresses if you want concurrent orders in the same currency.
+
+#### Payment is created but order never confirms
+
+Check:
+
+```bash
+curl https://the-fkh.eu/health
+docker compose --env-file .env.production -f docker-compose.prod.yml logs --tail=300 backend
+```
+
+Then check explorer APIs directly for the address shown to the customer.
+
+Common causes:
+
+- `ETHERSCAN_API_KEY` is missing or rate limited for ERC-20.
+- `TRONGRID_API_KEY` is missing or rate limited for TRC-20.
+- Explorer API is temporarily unavailable.
+- The customer paid a different address.
+- The customer paid the wrong network.
+- The blockchain transaction has not reached the required confirmations.
+
+#### Watcher does not detect ERC-20 payments
+
+Check:
+
+```env
+ETHERSCAN_API_KEY=...
+ETHERSCAN_API_URL=https://api.etherscan.io/v2/api
+CRYPTO_ETH_CONFIRMATIONS=12
+```
+
+Then recreate backend.
+
+#### Watcher does not detect TRC-20 payments
+
+Check:
+
+```env
+TRONGRID_API_URL=https://api.trongrid.io
+TRONGRID_API_KEY=...
+CRYPTO_TRON_CONFIRMATIONS=20
+```
+
+Then recreate backend.
+
+#### Customer underpaid
+
+Expected behavior:
+
+- order stays pending;
+- profile and payment screen show remaining crypto amount;
+- admin Telegram receives warning.
+
+Tell customer to send the remaining amount with the same asset/network to the same payment address.
+
+#### Admin notifications do not arrive
+
+Check:
+
+```env
+ORDER_NOTIFICATIONS_ENABLED=true
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_ADMIN_CHAT_ID=...
+TELEGRAM_ADMIN_IDS=...
+```
+
+Restart backend:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d --force-recreate backend
+```
+
+Check backend logs:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml logs --tail=200 backend
+```
+
+## 32. Production Checklist
 
 Before calling deployment complete:
 
@@ -967,4 +1401,9 @@ Before calling deployment complete:
 - Real `.env.production` is not committed.
 - Database backup command works.
 - Telegram webhook works if Telegram login is required.
+- Self-custody address pools are configured for BTC, USDT ERC-20, USDT TRC-20, and USDC ERC-20.
+- `ETHERSCAN_API_KEY` is set for ERC-20 monitoring.
+- `TRONGRID_API_KEY` is set or TronGrid public access is confirmed for TRC-20 monitoring.
+- `/api/v1/payments/crypto/methods` returns available crypto methods.
+- A small real crypto test order reaches `Confirmed`.
 - Admin user can see `Admin` badge and `Admin Panel` in profile.

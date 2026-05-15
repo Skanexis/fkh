@@ -75,6 +75,45 @@ export interface ApiOrderItem {
   thumbnailUrl?: string | null;
 }
 
+export interface ApiCryptoPayment {
+  id: string;
+  provider: string;
+  providerPaymentId?: string | null;
+  providerStatus: string;
+  currencyCode: string;
+  currencyLabel: string;
+  providerCurrency: string;
+  network: string;
+  priceAmount: number;
+  priceCurrency: string;
+  payAmount?: number | null;
+  payAddress?: string | null;
+  payinExtraId?: string | null;
+  actuallyPaid?: number | null;
+  pendingAmount?: number | null;
+  remainingAmount?: number | null;
+  isUnderpaid?: boolean;
+  paidAt?: string | null;
+  expiresAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiCryptoPaymentMethod {
+  code: string;
+  label: string;
+  network: string;
+  available?: boolean;
+  configured?: boolean;
+  totalSlots?: number;
+  freeSlots?: number;
+  busySlots?: number;
+  wallets?: Array<{
+    label: string;
+    status: "available" | "busy";
+  }>;
+}
+
 export interface ApiOrder {
   id: string;
   publicId: string;
@@ -107,6 +146,7 @@ export interface ApiOrder {
     message?: string | null;
     sentAt?: string | null;
   };
+  payment?: ApiCryptoPayment | null;
   status: "pending" | "accepted" | "completed" | "cancelled";
   totalAmount: number;
   subtotalAmount: number;
@@ -117,6 +157,26 @@ export interface ApiOrder {
   items: ApiOrderItem[];
 }
 
+export interface ApiAdminPayment extends ApiCryptoPayment {
+  order: ApiOrder;
+}
+
+export interface ApiAdminPaymentCurrencyStats {
+  currencyCode: string;
+  currencyLabel: string;
+  providerCurrency: string;
+  network: string;
+  count: number;
+  paidCount: number;
+  pendingCount: number;
+  partialCount: number;
+  expiredCount: number;
+  expectedFiat: number;
+  paidFiat: number;
+  receivedCrypto: number;
+  pendingCrypto: number;
+}
+
 export interface DashboardStats {
   totalRevenue: number;
   totalOrders: number;
@@ -124,6 +184,28 @@ export interface DashboardStats {
   pendingOrders: number;
   ordersByStatus: Record<string, number>;
   recentOrders: ApiOrder[];
+  monthlyRevenue?: Array<{ monthKey: string; value: number }>;
+  topCustomers?: Array<{
+    id: string;
+    name: string;
+    telegramUsername?: string | null;
+    telegramId?: string | null;
+    orderCount: number;
+    spent: number;
+    lastOrderPublicId: string;
+  }>;
+  paymentStats?: {
+    totalPayments: number;
+    paidPayments: number;
+    pendingPayments: number;
+    partialPayments: number;
+    expiredPayments: number;
+    totalExpectedRevenue: number;
+    paidRevenue: number;
+    totalReceivedCrypto: number;
+    totalPendingCrypto: number;
+    byCurrency: ApiAdminPaymentCurrencyStats[];
+  };
 }
 
 export interface ApiContact {

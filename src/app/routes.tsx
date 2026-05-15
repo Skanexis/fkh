@@ -10,6 +10,7 @@ import { AdminLayout } from "./pages/admin/AdminLayout";
 import { Dashboard } from "./pages/admin/Dashboard";
 import { AdminProducts } from "./pages/admin/AdminProducts";
 import { AdminOrders } from "./pages/admin/AdminOrders";
+import { AdminPayments } from "./pages/admin/AdminPayments";
 import { AdminUsers } from "./pages/admin/AdminUsers";
 import { AdminSettings } from "./pages/admin/AdminSettings";
 import { AdminShippingMethods } from "./pages/admin/AdminShippingMethods";
@@ -34,6 +35,7 @@ export const router = createBrowserRouter([
       { index: true, Component: Dashboard },
       { path: "products", Component: AdminProducts },
       { path: "orders", Component: AdminOrders },
+      { path: "payments", Component: AdminPayments },
       { path: "users", Component: AdminUsers },
       { path: "shipping", Component: AdminShippingMethods },
       { path: "settings", Component: AdminSettings },

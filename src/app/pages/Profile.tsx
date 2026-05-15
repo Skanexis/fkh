@@ -295,6 +295,16 @@ export function Profile() {
                           </span>
                           <span style={{ color: "#FF4D6D", fontWeight: 800, fontSize: 16 }}>{order.total}€</span>
                         </div>
+                        {order.payment?.isUnderpaid && order.payment.remainingAmount && order.payment.remainingAmount > 0 && (
+                          <div
+                            className="mt-2 rounded-xl px-3 py-2"
+                            style={{ background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.25)" }}
+                          >
+                            <span style={{ color: "#f59e0b", fontSize: 12, fontWeight: 700 }}>
+                              {t("cart.paymentRemaining")}: {formatCryptoAmount(order.payment.remainingAmount)} {order.payment.providerCurrency.toUpperCase()}
+                            </span>
+                          </div>
+                        )}
                       </motion.div>
                     );
                   })}
@@ -307,4 +317,8 @@ export function Profile() {
       </div>
     </div>
   );
+}
+
+function formatCryptoAmount(amount: number) {
+  return amount.toFixed(12).replace(/\.?0+$/, "");
 }

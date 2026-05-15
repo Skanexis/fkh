@@ -6,6 +6,13 @@ import { badRequest, notFound } from "../../common/http-error.js";
 import { money } from "../../common/serialize.js";
 import { env } from "../../config/env.js";
 import { prisma } from "../../db/prisma.js";
+import {
+  CRYPTO_PAYMENT_METHODS,
+  createCryptoPayment,
+  getCryptoPaymentMethod,
+  serializeCryptoPayment,
+  type CryptoPaymentCode,
+} from "../payments/crypto-payments.service.js";
 import { sendTelegramJson } from "../telegram/telegram.service.js";
 
 const requiredText = (min: number, max: number) => z.string().trim().min(min).max(max);
@@ -17,6 +24,7 @@ const createOrderBody = z.object({
   customerComment: optionalText(1000),
   customerEmail: optionalEmail,
   customerPhone: optionalPhone,
+  paymentCurrency: z.enum(CRYPTO_PAYMENT_METHODS.map((method) => method.code) as [CryptoPaymentCode, ...CryptoPaymentCode[]]).default("btc"),
   shipping: z.object({
     methodId: z.string().uuid(),
     fullName: requiredText(2, 120),
@@ -101,6 +109,8 @@ export async function registerOrderRoutes(app: FastifyInstance) {
     const subtotal = orderItems.reduce((sum, item) => sum + item.lineTotal, 0);
     const shippingAmount = effectiveShippingPrice(shippingMethod);
     const total = subtotal + shippingAmount;
+    const paymentMethod = getCryptoPaymentMethod(body.data.paymentCurrency);
+    if (!paymentMethod) throw badRequest("Unsupported crypto payment currency");
     const order = await prisma.$transaction(async (tx) => {
       const publicId = await createPublicOrderId(tx);
       return tx.order.create({
@@ -133,14 +143,48 @@ export async function registerOrderRoutes(app: FastifyInstance) {
           totalAmount: total,
           currency: "EUR",
           items: { create: orderItems },
+          cryptoPayment: {
+            create: {
+              currencyCode: paymentMethod.code,
+              currencyLabel: paymentMethod.label,
+              providerCurrency: paymentMethod.providerCurrency,
+              network: paymentMethod.network,
+              priceAmount: total,
+              priceCurrency: "EUR",
+            },
+          },
         },
-        include: { items: true },
+        include: { items: true, cryptoPayment: true },
       });
     });
 
-    await notifyNewOrder(order);
+    try {
+      await createCryptoPayment({
+        orderId: order.id,
+        publicId: order.publicId,
+        amount: total,
+        currency: order.currency,
+        paymentCode: body.data.paymentCurrency,
+      });
+    } catch (error) {
+      await prisma.cryptoPayment.update({
+        where: { orderId: order.id },
+        data: {
+          providerStatus: "creation_failed",
+          rawProviderPayload: { error: error instanceof Error ? error.message : "Payment creation failed" },
+        },
+      });
+      throw error;
+    }
 
-    return { data: serializeOrder(order) };
+    const orderWithPayment = await prisma.order.findUniqueOrThrow({
+      where: { id: order.id },
+      include: { items: true, cryptoPayment: true },
+    });
+
+    await notifyNewOrder(orderWithPayment);
+
+    return { data: serializeOrder(orderWithPayment) };
   });
 }
 
@@ -251,6 +295,12 @@ function formatAdminOrderMessage(order: any) {
     items,
     "",
     `<b>Total:</b> ${money(order.totalAmount)} ${order.currency}`,
+    order.cryptoPayment
+      ? `<b>Payment:</b> ${escapeHtml(order.cryptoPayment.currencyLabel)} (${escapeHtml(order.cryptoPayment.network)})`
+      : null,
+    order.cryptoPayment?.payAmount && order.cryptoPayment?.payAddress
+      ? `<b>Send:</b> <code>${escapeHtml(order.cryptoPayment.payAmount)}</code> ${escapeHtml(order.cryptoPayment.providerCurrency.toUpperCase())}\n<b>To:</b> <code>${escapeHtml(order.cryptoPayment.payAddress)}</code>`
+      : null,
     `<b>Shipping:</b> ${escapeHtml(order.shippingMethodPreference ?? "-")} (${money(order.shippingAmount ?? 0)} ${order.currency})`,
     order.shippingPickupPoint ? `<b>Pickup point:</b> ${escapeHtml(order.shippingPickupPoint)}` : null,
     "",
@@ -320,6 +370,7 @@ export function serializeOrder(order: any) {
       message: order.trackingMessage,
       sentAt: order.trackingSentAt?.toISOString() ?? null,
     },
+    payment: serializeCryptoPayment(order.cryptoPayment),
     createdAt: order.createdAt.toISOString(),
     updatedAt: order.updatedAt.toISOString(),
     acceptedAt: order.acceptedAt?.toISOString() ?? null,

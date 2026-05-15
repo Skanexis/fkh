@@ -15,6 +15,8 @@ import { registerUserRoutes } from "./modules/users/users.routes.js";
 import { registerOrderRoutes } from "./modules/orders/orders.routes.js";
 import { registerAdminRoutes } from "./modules/admin/admin.routes.js";
 import { registerMediaRoutes } from "./modules/media/media.routes.js";
+import { registerPaymentRoutes } from "./modules/payments/payments.routes.js";
+import { startCryptoPaymentWatcher } from "./modules/payments/crypto-payments.service.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -124,6 +126,8 @@ export async function buildApp() {
   await registerOrderRoutes(app);
   await registerAdminRoutes(app);
   await registerMediaRoutes(app);
+  await registerPaymentRoutes(app);
+  startCryptoPaymentWatcher(app);
 
   return app;
 }

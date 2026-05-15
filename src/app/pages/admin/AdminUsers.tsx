@@ -13,7 +13,17 @@ interface AdminUser {
   telegramId: string;
   avatarUrl?: string | null;
   orders: number;
+  paidOrders: number;
   spent: number;
+  paymentCurrencies: Array<{
+    currencyCode: string;
+    currencyLabel: string;
+    providerCurrency: string;
+    network: string;
+    orderCount: number;
+    spent: number;
+    receivedCrypto: number;
+  }>;
   joined: string;
   active: boolean;
 }
@@ -31,7 +41,14 @@ export function AdminUsers() {
 
   async function loadUsers() {
     try {
-      const apiUsers = await apiRequest<Array<ApiUser & { email?: string | null; orderCount?: number; spent?: number; createdAt?: string }>>(
+      const apiUsers = await apiRequest<Array<ApiUser & {
+        email?: string | null;
+        orderCount?: number;
+        paidOrderCount?: number;
+        spent?: number;
+        paymentCurrencies?: AdminUser["paymentCurrencies"];
+        createdAt?: string;
+      }>>(
         "/api/v1/admin/users?limit=100",
       );
       setUsers(apiUsers.map(toAdminUser));
@@ -178,6 +195,19 @@ export function AdminUsers() {
                 </span>
                 <span style={{ color: "#FF4D6D", fontWeight: 600, fontSize: 11 }}>€{user.spent}</span>
               </div>
+              {user.paymentCurrencies.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {user.paymentCurrencies.slice(0, 3).map((currency) => (
+                    <span
+                      key={`${currency.currencyCode}:${currency.network}`}
+                      className="px-2 py-0.5 rounded-full"
+                      style={{ background: "rgba(59,130,246,0.12)", color: "#60A5FA", fontSize: 10, fontWeight: 700 }}
+                    >
+                      {currency.currencyLabel}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </motion.div>
         ))}
@@ -269,6 +299,34 @@ export function AdminUsers() {
                   ))}
                 </div>
 
+                {selectedUser.paymentCurrencies.length > 0 && (
+                  <div
+                    className="rounded-xl p-3 mb-5"
+                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
+                  >
+                    <p style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 13, marginBottom: 10 }}>Crypto spent</p>
+                    <div className="flex flex-col gap-2">
+                      {selectedUser.paymentCurrencies.map((currency) => (
+                        <div
+                          key={`${currency.currencyCode}:${currency.network}`}
+                          className="flex items-center justify-between gap-3"
+                        >
+                          <div>
+                            <p style={{ color: "#E5E7EB", fontSize: 12, fontWeight: 700 }}>{currency.currencyLabel}</p>
+                            <p style={{ color: "#6B7280", fontSize: 11 }}>{currency.network} · {currency.orderCount} paid orders</p>
+                          </div>
+                          <div className="text-right">
+                            <p style={{ color: "#22c55e", fontSize: 12, fontWeight: 800 }}>
+                              {formatCrypto(currency.receivedCrypto)} {currency.providerCurrency.toUpperCase()}
+                            </p>
+                            <p style={{ color: "#6B7280", fontSize: 11 }}>€{currency.spent}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Actions */}
                 <div className="flex gap-3">
                   <a
@@ -309,7 +367,14 @@ export function AdminUsers() {
   );
 }
 
-function toAdminUser(user: ApiUser & { email?: string | null; orderCount?: number; spent?: number; createdAt?: string }): AdminUser {
+function toAdminUser(user: ApiUser & {
+  email?: string | null;
+  orderCount?: number;
+  paidOrderCount?: number;
+  spent?: number;
+  paymentCurrencies?: AdminUser["paymentCurrencies"];
+  createdAt?: string;
+}): AdminUser {
   return {
     id: user.id,
     name: user.name,
@@ -318,8 +383,17 @@ function toAdminUser(user: ApiUser & { email?: string | null; orderCount?: numbe
     telegramId: user.telegramId,
     avatarUrl: user.telegramPhotoUrl ?? user.avatarUrl,
     orders: user.orderCount ?? 0,
+    paidOrders: user.paidOrderCount ?? 0,
     spent: user.spent ?? 0,
+    paymentCurrencies: user.paymentCurrencies ?? [],
     joined: user.createdAt ?? new Date().toISOString(),
     active: user.status === "active",
   };
+}
+
+function formatCrypto(value: number) {
+  return value.toLocaleString("en-US", {
+    maximumFractionDigits: 12,
+    useGrouping: false,
+  });
 }

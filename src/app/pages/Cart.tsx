@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { AlertCircle, ShoppingCart, Trash2, Minus, Plus, ArrowRight, Package } from "lucide-react";
+import { AlertCircle, ShoppingCart, Trash2, Minus, Plus, ArrowRight, Package, Coins, Copy, CheckCircle, Wallet } from "lucide-react";
 import { useCart, type CartItem } from "../store/cart-context";
 import { TopBar } from "../components/TopBar";
 import { useNavigate } from "react-router";
 import { useAuth } from "../auth/auth-context";
 import { TelegramLoginPanel } from "../auth/TelegramLoginPanel";
 import { apiRequest } from "../api/client";
-import { ApiOrder, ApiShippingMethod } from "../api/types";
+import { ApiCryptoPaymentMethod, ApiOrder, ApiShippingMethod } from "../api/types";
 import { useI18n } from "../i18n";
 import { ProductImagePlaceholder } from "../components/ProductImagePlaceholder";
 
@@ -26,7 +26,7 @@ interface ShippingForm {
   instructions: string;
 }
 
-type ShippingFieldErrors = Partial<Record<keyof ShippingForm | "shippingMethod", string>>;
+type ShippingFieldErrors = Partial<Record<keyof ShippingForm | "shippingMethod" | "paymentMethod", string>>;
 
 const initialShippingForm: ShippingForm = {
   fullName: "",
@@ -45,6 +45,13 @@ const initialShippingForm: ShippingForm = {
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+const fallbackCryptoMethods: ApiCryptoPaymentMethod[] = [
+  { code: "btc", label: "BTC", network: "Bitcoin" },
+  { code: "usdt_erc20", label: "USDT (ETH)", network: "Ethereum ERC-20" },
+  { code: "usdt_trc20", label: "USDT (TRON)", network: "TRON TRC-20" },
+  { code: "usdc_erc20", label: "USDC (ETH)", network: "Ethereum ERC-20" },
+];
+
 export function Cart() {
   const { items, removeItem, updateQuantity, total, clearCart } = useCart();
   const navigate = useNavigate();
@@ -57,7 +64,12 @@ export function Cart() {
   const [shippingErrors, setShippingErrors] = useState<ShippingFieldErrors>({});
   const [shippingMethods, setShippingMethods] = useState<ApiShippingMethod[]>([]);
   const [selectedShippingMethodId, setSelectedShippingMethodId] = useState("");
+  const [cryptoMethods, setCryptoMethods] = useState<ApiCryptoPaymentMethod[]>(fallbackCryptoMethods);
+  const [selectedPaymentCurrency, setSelectedPaymentCurrency] = useState(fallbackCryptoMethods[0].code);
+  const [createdOrder, setCreatedOrder] = useState<ApiOrder | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
   const selectedShippingMethod = shippingMethods.find((method) => method.id === selectedShippingMethodId);
+  const selectedCryptoMethod = cryptoMethods.find((method) => method.code === selectedPaymentCurrency) ?? cryptoMethods[0];
   const shippingAmount = selectedShippingMethod?.priceAmount ?? 0;
   const orderTotal = total + shippingAmount;
 
@@ -74,6 +86,49 @@ export function Cart() {
       });
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!createdOrder) return;
+    let cancelled = false;
+    const timer = window.setInterval(() => {
+      apiRequest<ApiOrder>(`/api/v1/me/orders/${encodeURIComponent(createdOrder.publicId)}`)
+        .then((order) => {
+          if (!cancelled) setCreatedOrder(order);
+        })
+        .catch(() => undefined);
+    }, 10000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [createdOrder?.publicId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCryptoMethods() {
+      const methods = await apiRequest<ApiCryptoPaymentMethod[]>("/api/v1/payments/crypto/methods");
+      if (cancelled || methods.length === 0) return;
+      setCryptoMethods(methods);
+      setSelectedPaymentCurrency((current) => {
+        const currentMethod = methods.find((method) => method.code === current);
+        if (methodIsAvailable(currentMethod)) return current;
+        return methods.find(methodIsAvailable)?.code ?? methods[0].code;
+      });
+    }
+
+    loadCryptoMethods()
+      .catch(() => undefined);
+    const timer = window.setInterval(() => {
+      loadCryptoMethods()
+        .catch(() => undefined);
+    }, 15000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
     };
   }, []);
 
@@ -110,12 +165,22 @@ export function Cart() {
       return;
     }
 
+    if (!methodIsAvailable(selectedCryptoMethod)) {
+      setCheckoutError(t("cart.paymentMethodBusyError"));
+      document.querySelector(`[data-shipping-field="paymentMethod"]`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+      return;
+    }
+
     try {
       setOrdered(true);
-      await apiRequest<ApiOrder>("/api/v1/orders", {
+      const order = await apiRequest<ApiOrder>("/api/v1/orders", {
         method: "POST",
         body: JSON.stringify({
           shipping: toShippingPayload(shippingForm, selectedShippingMethod),
+          paymentCurrency: selectedPaymentCurrency,
           items: items.map((item) => ({
             productId: item.product.id,
             priceTierId: item.tier.id,
@@ -125,11 +190,119 @@ export function Cart() {
       });
       clearCart();
       setOrdered(false);
-      navigate("/profile");
+      setCreatedOrder(order);
     } catch (err) {
       setOrdered(false);
       setCheckoutError(err instanceof Error ? err.message : t("cart.checkoutError"));
     }
+  }
+
+  if (createdOrder) {
+    const payment = createdOrder.payment;
+    return (
+      <div
+        className="min-h-screen pb-24"
+        style={{ background: "#0B0B0C", fontFamily: "Inter, sans-serif" }}
+      >
+        <TopBar title={t("cart.paymentTitle")} showBack />
+        <div className="pt-20 px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl p-5"
+            style={{ background: "#1A1A1D", border: "1px solid rgba(34,197,94,0.24)" }}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="rounded-full p-3" style={{ background: "rgba(34,197,94,0.12)" }}>
+                <Coins size={22} color="#22c55e" />
+              </div>
+              <div>
+                <h1 style={{ color: "#FFFFFF", fontSize: 20, fontWeight: 800 }}>{createdOrder.publicId}</h1>
+                <p style={{ color: "#A0A0A0", fontSize: 12, marginTop: 2 }}>{t("cart.paymentWaiting")}</p>
+              </div>
+            </div>
+
+            <PaymentLine label={t("cart.paymentMethod")} value={payment ? `${payment.currencyLabel} · ${payment.network}` : selectedCryptoMethod.label} />
+            <PaymentLine label={t("cart.paymentStatus")} value={payment ? formatPaymentStatus(payment.providerStatus, t) : t("cart.paymentStatusWaiting")} />
+            <PaymentLine label={t("cart.paymentFiat")} value={`${createdOrder.totalAmount} ${createdOrder.currency}`} />
+            {payment?.expiresAt && (
+              <PaymentLine label={t("cart.paymentExpires")} value={new Date(payment.expiresAt).toLocaleString()} />
+            )}
+            {payment?.payAmount && (
+              <PaymentLine
+                label={t("cart.paymentAmount")}
+                value={`${formatCryptoAmount(payment.payAmount)} ${payment.providerCurrency.toUpperCase()}`}
+                copyValue={String(payment.payAmount)}
+                fieldId="amount"
+                copiedField={copiedField}
+                onCopy={copyPaymentValue}
+              />
+            )}
+            {payment?.actuallyPaid !== null && payment?.actuallyPaid !== undefined && (
+              <PaymentLine
+                label={t("cart.paymentReceived")}
+                value={`${formatCryptoAmount(payment.actuallyPaid)} ${payment.providerCurrency.toUpperCase()}`}
+              />
+            )}
+            {payment?.pendingAmount && payment.pendingAmount > 0 && (
+              <PaymentLine
+                label={t("cart.paymentPending")}
+                value={`${formatCryptoAmount(payment.pendingAmount)} ${payment.providerCurrency.toUpperCase()}`}
+              />
+            )}
+            {payment?.isUnderpaid && payment.remainingAmount && payment.remainingAmount > 0 && (
+              <PaymentLine
+                label={t("cart.paymentRemaining")}
+                value={`${formatCryptoAmount(payment.remainingAmount)} ${payment.providerCurrency.toUpperCase()}`}
+                copyValue={String(payment.remainingAmount)}
+                fieldId="remaining"
+                copiedField={copiedField}
+                onCopy={copyPaymentValue}
+                tone="warning"
+              />
+            )}
+            {payment?.payAddress && (
+              <PaymentLine
+                label={t("cart.paymentAddress")}
+                value={payment.payAddress}
+                copyValue={payment.payAddress}
+                fieldId="address"
+                copiedField={copiedField}
+                onCopy={copyPaymentValue}
+              />
+            )}
+            {payment?.payinExtraId && (
+              <PaymentLine
+                label={t("cart.paymentMemo")}
+                value={payment.payinExtraId}
+                copyValue={payment.payinExtraId}
+                fieldId="memo"
+                copiedField={copiedField}
+                onCopy={copyPaymentValue}
+              />
+            )}
+
+            <div
+              className="mt-4 rounded-xl p-3"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
+            >
+              <p style={{ color: "#E5E7EB", fontSize: 12, lineHeight: 1.5 }}>
+                {payment?.isUnderpaid ? t("cart.paymentUnderpaidNotice") : t("cart.paymentNotice")}
+              </p>
+            </div>
+
+            <button
+              onClick={() => navigate("/profile")}
+              className="mt-5 w-full py-3.5 rounded-xl flex items-center justify-center gap-2"
+              style={{ background: "linear-gradient(135deg, #22c55e, #16a34a)", color: "#FFFFFF", fontWeight: 800 }}
+            >
+              <CheckCircle size={18} />
+              {t("cart.openOrders")}
+            </button>
+          </motion.div>
+        </div>
+      </div>
+    );
   }
 
   if (items.length === 0) {
@@ -356,6 +529,28 @@ export function Cart() {
               </label>
               <ShippingInput field="pickupPoint" label={t("cart.pickupPoint")} value={shippingForm.pickupPoint} error={shippingErrors.pickupPoint} onChange={(value) => updateShipping("pickupPoint", value)} />
 
+              <div data-shipping-field="paymentMethod">
+                <div className="flex items-center justify-between gap-3">
+                  <span style={{ color: "#A0A0A0", fontSize: 12, fontWeight: 600 }}>{t("cart.paymentMethod")} *</span>
+                  <span style={{ color: "#6B7280", fontSize: 11 }}>{t("cart.walletAvailability")}</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                  {cryptoMethods.map((method) => (
+                    <PaymentMethodCard
+                      key={method.code}
+                      method={method}
+                      active={selectedPaymentCurrency === method.code}
+                      t={t}
+                      onSelect={() => {
+                        if (!methodIsAvailable(method)) return;
+                        setSelectedPaymentCurrency(method.code);
+                        setCheckoutError(null);
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+
               <label className="block" data-shipping-field="instructions">
                 <span style={{ color: "#A0A0A0", fontSize: 12, fontWeight: 600 }}>{t("cart.deliveryNotes")}</span>
                 <textarea
@@ -452,7 +647,7 @@ export function Cart() {
           {ordered ? (
             <>
               <Package size={20} strokeWidth={2.5} />
-              {t("cart.orderPlaced")}
+              {t("cart.creatingPayment")}
             </>
           ) : (
             <>
@@ -470,6 +665,54 @@ export function Cart() {
     setShippingErrors((current) => ({ ...current, [field]: undefined }));
     setCheckoutError(null);
   }
+
+  async function copyPaymentValue(fieldId: string, value: string) {
+    await navigator.clipboard?.writeText(value).catch(() => undefined);
+    setCopiedField(fieldId);
+    window.setTimeout(() => setCopiedField(null), 1400);
+  }
+}
+
+function PaymentLine({
+  label,
+  value,
+  copyValue,
+  fieldId,
+  copiedField,
+  onCopy,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  copyValue?: string;
+  fieldId?: string;
+  copiedField?: string | null;
+  onCopy?: (fieldId: string, value: string) => void;
+  tone?: "default" | "warning";
+}) {
+  const copied = Boolean(fieldId && copiedField === fieldId);
+  const valueColor = tone === "warning" ? "#f59e0b" : "#FFFFFF";
+  return (
+    <div className="py-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+      <p style={{ color: "#A0A0A0", fontSize: 11, fontWeight: 700, marginBottom: 5 }}>{label}</p>
+      <div className="flex items-start gap-2">
+        <p className="flex-1 break-all" style={{ color: valueColor, fontSize: 14, lineHeight: 1.45, fontWeight: 650 }}>
+          {value}
+        </p>
+        {copyValue && fieldId && onCopy && (
+          <button
+            type="button"
+            onClick={() => onCopy(fieldId, copyValue)}
+            className="rounded-lg p-2 flex-shrink-0"
+            style={{ background: copied ? "rgba(34,197,94,0.16)" : "rgba(255,255,255,0.07)" }}
+            aria-label={copied ? "Copied" : "Copy"}
+          >
+            {copied ? <CheckCircle size={15} color="#22c55e" /> : <Copy size={15} color="#A0A0A0" />}
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function ShippingInput({
@@ -515,6 +758,113 @@ function ShippingInput({
 
 function FieldError({ message }: { message: string }) {
   return <p style={{ color: "#ef4444", fontSize: 11, lineHeight: 1.35, marginTop: 5 }}>{message}</p>;
+}
+
+function PaymentMethodCard({
+  method,
+  active,
+  onSelect,
+  t,
+}: {
+  method: ApiCryptoPaymentMethod;
+  active: boolean;
+  onSelect: () => void;
+  t: (key: string, values?: Record<string, string | number>) => string;
+}) {
+  const available = methodIsAvailable(method);
+  const configured = method.configured !== false;
+  const statusColor = available ? "#22c55e" : configured ? "#f59e0b" : "#ef4444";
+  const statusLabel = available ? t("cart.walletAvailable") : configured ? t("cart.walletBusy") : t("cart.walletNotConfigured");
+  const freeSlots = method.freeSlots ?? (available ? 1 : 0);
+  const totalSlots = method.totalSlots ?? 1;
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      disabled={!available}
+      className="rounded-xl p-3 text-left transition-all"
+      style={{
+        minHeight: 132,
+        background: active
+          ? "linear-gradient(135deg, rgba(255,77,109,0.16), rgba(255,154,139,0.08))"
+          : "rgba(255,255,255,0.045)",
+        border: `1px solid ${active ? "rgba(255,77,109,0.52)" : available ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.05)"}`,
+        opacity: available ? 1 : 0.62,
+      }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span
+            className="rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{
+              width: 32,
+              height: 32,
+              background: active ? "rgba(255,77,109,0.18)" : "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.07)",
+            }}
+          >
+            <Wallet size={16} color={active ? "#FF4D6D" : "#A0A0A0"} />
+          </span>
+          <div className="min-w-0">
+            <p style={{ color: active ? "#FF4D6D" : "#FFFFFF", fontSize: 13, fontWeight: 800 }}>
+              {method.label}
+            </p>
+            <p className="truncate" style={{ color: "#A0A0A0", fontSize: 10, marginTop: 1 }}>
+              {method.network}
+            </p>
+          </div>
+        </div>
+        <span
+          className="rounded-full px-2 py-1 flex-shrink-0"
+          style={{
+            color: statusColor,
+            background: `${statusColor}1f`,
+            border: `1px solid ${statusColor}40`,
+            fontSize: 10,
+            fontWeight: 800,
+          }}
+        >
+          {statusLabel}
+        </span>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between">
+        <span style={{ color: "#6B7280", fontSize: 10, fontWeight: 700 }}>{t("cart.walletSlots")}</span>
+        <span style={{ color: available ? "#E5E7EB" : "#A0A0A0", fontSize: 11, fontWeight: 800 }}>
+          {freeSlots}/{totalSlots}
+        </span>
+      </div>
+
+      {method.wallets && method.wallets.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {method.wallets.slice(0, 4).map((wallet) => {
+            const walletFree = wallet.status === "available";
+            return (
+              <span
+                key={wallet.label}
+                className="rounded-full px-2 py-1"
+                style={{
+                  color: walletFree ? "#22c55e" : "#f59e0b",
+                  background: walletFree ? "rgba(34,197,94,0.1)" : "rgba(245,158,11,0.1)",
+                  border: `1px solid ${walletFree ? "rgba(34,197,94,0.2)" : "rgba(245,158,11,0.22)"}`,
+                  fontSize: 9,
+                  fontWeight: 750,
+                }}
+              >
+                {wallet.label}: {walletFree ? t("cart.walletFreeShort") : t("cart.walletBusyShort")}
+              </span>
+            );
+          })}
+          {method.wallets.length > 4 && (
+            <span style={{ color: "#6B7280", fontSize: 10, alignSelf: "center" }}>
+              +{method.wallets.length - 4}
+            </span>
+          )}
+        </div>
+      )}
+    </button>
+  );
 }
 
 function CartItemThumbnail({ item }: { item: CartItem }) {
@@ -607,6 +957,33 @@ function toShippingPayload(form: ShippingForm, shippingMethod?: ApiShippingMetho
 
 function formatPrice(amount: number, t: (key: string) => string) {
   return amount > 0 ? `${amount}€` : t("cart.free");
+}
+
+function formatCryptoAmount(amount: number) {
+  return amount.toFixed(12).replace(/\.?0+$/, "");
+}
+
+function formatPaymentStatus(status: string, t: (key: string) => string) {
+  const normalized = status.toLowerCase();
+  const labels: Record<string, string> = {
+    waiting: t("cart.paymentStatusWaiting"),
+    confirming: t("cart.paymentStatusConfirming"),
+    confirmed: t("cart.paymentStatusConfirming"),
+    sending: t("cart.paymentStatusConfirming"),
+    finished: t("cart.paymentStatusFinished"),
+    partially_paid: t("cart.paymentStatusPartial"),
+    failed: t("cart.paymentStatusFailed"),
+    expired: t("cart.paymentStatusExpired"),
+    refunded: t("cart.paymentStatusFailed"),
+  };
+  return labels[normalized] ?? status;
+}
+
+function methodIsAvailable(method?: ApiCryptoPaymentMethod) {
+  if (!method) return false;
+  if (method.configured === false) return false;
+  if (typeof method.available === "boolean") return method.available;
+  return true;
 }
 
 function optionalString(value: string) {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { TrendingUp, ShoppingBag, Users, Clock, ArrowUpRight, ArrowRight } from "lucide-react";
+import { TrendingUp, ShoppingBag, Users, Clock, ArrowUpRight, ArrowRight, WalletCards, AlertTriangle } from "lucide-react";
 import { useNavigate } from "react-router";
 import {
   AreaChart,
@@ -67,6 +67,8 @@ export function Dashboard() {
     recentOrders: [],
   };
   const data = dashboard ?? emptyDashboard;
+  const chartData = data.monthlyRevenue?.length ? data.monthlyRevenue : REVENUE_DATA;
+  const paymentStats = data.paymentStats;
 
   const stats = [
     {
@@ -149,6 +151,64 @@ export function Dashboard() {
         })}
       </div>
 
+      {/* Payment dashboard */}
+      {paymentStats && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
+          className="rounded-2xl p-4 mb-5"
+          style={{
+            background: "#111827",
+            border: "1px solid rgba(255,255,255,0.05)",
+          }}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 15 }}>{t("admin.payments")}</h3>
+              <p style={{ color: "#6B7280", fontSize: 12 }}>Crypto invoices and confirmed receipts</p>
+            </div>
+            <button onClick={() => navigate("/admin/payments")} className="flex items-center gap-1">
+              <span style={{ color: "#3B82F6", fontSize: 12 }}>{t("admin.viewAll")}</span>
+              <ArrowRight size={12} color="#3B82F6" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+            <PaymentStat label="Paid" value={paymentStats.paidPayments} icon={WalletCards} color="#22c55e" bg="rgba(34,197,94,0.1)" />
+            <PaymentStat label="Pending" value={paymentStats.pendingPayments} icon={Clock} color="#3B82F6" bg="rgba(59,130,246,0.1)" />
+            <PaymentStat label="Partial" value={paymentStats.partialPayments} icon={AlertTriangle} color="#F97316" bg="rgba(249,115,22,0.1)" />
+            <PaymentStat label="Expired" value={paymentStats.expiredPayments} icon={AlertTriangle} color="#6B7280" bg="rgba(107,114,128,0.1)" />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            {paymentStats.byCurrency.slice(0, 4).map((currency) => (
+              <div
+                key={`${currency.currencyCode}:${currency.network}`}
+                className="rounded-xl p-3"
+                style={{ background: "rgba(255,255,255,0.03)" }}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p style={{ color: "#FFFFFF", fontSize: 13, fontWeight: 800 }}>{currency.currencyLabel}</p>
+                    <p style={{ color: "#6B7280", fontSize: 11 }}>{currency.network} · {currency.count} invoices</p>
+                  </div>
+                  <div className="text-right">
+                    <p style={{ color: "#22c55e", fontSize: 13, fontWeight: 800 }}>
+                      {formatCrypto(currency.receivedCrypto)} {currency.providerCurrency.toUpperCase()}
+                    </p>
+                    <p style={{ color: "#6B7280", fontSize: 11 }}>€{formatFiat(currency.paidFiat)} paid</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {paymentStats.byCurrency.length === 0 && (
+              <p style={{ color: "#6B7280", fontSize: 12 }}>No crypto payments yet.</p>
+            )}
+          </div>
+        </motion.div>
+      )}
+
       {/* Revenue chart */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -172,7 +232,7 @@ export function Dashboard() {
           </div>
         </div>
         <ResponsiveContainer width="100%" height={140}>
-          <AreaChart data={REVENUE_DATA}>
+          <AreaChart data={chartData}>
             <defs>
               <linearGradient id="goldGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#FF4D6D" stopOpacity={0.3} />
@@ -231,7 +291,7 @@ export function Dashboard() {
         </div>
         <div className="flex flex-col gap-2">
           {data.recentOrders.slice(0, 4).map((order) => {
-            const status = STATUS_CONFIG[order.status];
+            const status = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.pending;
             return (
               <div
                 key={order.publicId}
@@ -240,7 +300,10 @@ export function Dashboard() {
               >
                 <div>
                   <p style={{ color: "#FFFFFF", fontSize: 13, fontWeight: 600 }}>{order.publicId}</p>
-                  <p style={{ color: "#6B7280", fontSize: 11 }}>{order.customerName}</p>
+                  <p style={{ color: "#6B7280", fontSize: 11 }}>
+                    {order.customerName}
+                    {order.payment ? ` · ${order.payment.currencyLabel}` : ""}
+                  </p>
                 </div>
                 <span
                   className="px-2 py-0.5 rounded-full"
@@ -282,9 +345,15 @@ export function Dashboard() {
           </button>
         </div>
         <div className="flex flex-col gap-2">
-          {data.recentOrders.slice(0, 3).map((order, i) => (
+          {(data.topCustomers?.length ? data.topCustomers : data.recentOrders.slice(0, 3).map((order) => ({
+            id: order.id,
+            name: order.customerName,
+            orderCount: 1,
+            spent: order.totalAmount,
+            lastOrderPublicId: order.publicId,
+          }))).map((customer, i) => (
             <div
-              key={order.id}
+              key={customer.id}
               className="flex items-center gap-3 py-2 px-3 rounded-xl"
               style={{ background: "rgba(255,255,255,0.03)" }}
             >
@@ -300,13 +369,13 @@ export function Dashboard() {
                   fontSize: 12,
                 }}
               >
-                {order.customerName.charAt(0)}
+                {customer.name.charAt(0)}
               </div>
               <div className="flex-1 min-w-0">
-                <p style={{ color: "#FFFFFF", fontSize: 13, fontWeight: 500 }}>{order.customerName}</p>
-                <p style={{ color: "#6B7280", fontSize: 11 }}>{order.publicId}</p>
+                <p style={{ color: "#FFFFFF", fontSize: 13, fontWeight: 500 }}>{customer.name}</p>
+                <p style={{ color: "#6B7280", fontSize: 11 }}>{customer.orderCount} orders · {customer.lastOrderPublicId}</p>
               </div>
-              <span style={{ color: "#22c55e", fontWeight: 700, fontSize: 13 }}>€{order.totalAmount}</span>
+              <span style={{ color: "#22c55e", fontWeight: 700, fontSize: 13 }}>€{formatFiat(customer.spent)}</span>
             </div>
           ))}
           {data.recentOrders.length === 0 && (
@@ -316,4 +385,42 @@ export function Dashboard() {
       </motion.div>
     </div>
   );
+}
+
+function PaymentStat({
+  label,
+  value,
+  icon: Icon,
+  color,
+  bg,
+}: {
+  label: string;
+  value: number;
+  icon: typeof WalletCards;
+  color: string;
+  bg: string;
+}) {
+  return (
+    <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)" }}>
+      <div className="rounded-lg flex items-center justify-center mb-2" style={{ width: 30, height: 30, background: bg }}>
+        <Icon size={14} color={color} strokeWidth={2} />
+      </div>
+      <p style={{ color: "#FFFFFF", fontWeight: 800, fontSize: 17 }}>{value}</p>
+      <p style={{ color: "#6B7280", fontSize: 10 }}>{label}</p>
+    </div>
+  );
+}
+
+function formatCrypto(value: number) {
+  return value.toLocaleString("en-US", {
+    maximumFractionDigits: 12,
+    useGrouping: false,
+  });
+}
+
+function formatFiat(value: number) {
+  return value.toLocaleString("en-US", {
+    minimumFractionDigits: value % 1 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  });
 }
