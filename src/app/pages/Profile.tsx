@@ -428,7 +428,7 @@ function PaymentModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4"
+      className="fkh-modal-overlay fixed inset-0 z-50 flex items-end md:items-center justify-center p-4"
       style={{ background: "rgba(0,0,0,0.72)", backdropFilter: "blur(8px)" }}
       onClick={onClose}
     >
@@ -436,7 +436,7 @@ function PaymentModal({
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 40 }}
-        className="w-full max-w-md max-h-[88vh] overflow-y-auto rounded-2xl"
+        className="fkh-modal-panel w-full max-w-md overflow-y-auto rounded-2xl"
         style={{ background: "#1A1A1D", border: "1px solid rgba(255,77,109,0.18)" }}
         onClick={(event) => event.stopPropagation()}
       >

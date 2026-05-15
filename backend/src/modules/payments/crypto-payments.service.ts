@@ -536,6 +536,16 @@ export function serializeCryptoPayment(payment: any) {
   };
 }
 
+export function cryptoPaymentHasIncomingFunds(payment: any) {
+  const actuallyPaid = Number(payment.actuallyPaid ?? 0);
+  const pendingAmount = pendingCryptoAmount(payment);
+  return (
+    Number.isFinite(actuallyPaid) && actuallyPaid > 0
+  ) || (
+    Number.isFinite(pendingAmount) && pendingAmount > 0
+  ) || ["confirming", "partially_paid", "finished"].includes(payment.providerStatus);
+}
+
 function pendingCryptoAmount(payment: any) {
   const raw = typeof payment.rawProviderPayload === "object" && payment.rawProviderPayload ? payment.rawProviderPayload : null;
   const value = raw && "lastPendingReceived" in raw ? Number((raw as any).lastPendingReceived) : 0;

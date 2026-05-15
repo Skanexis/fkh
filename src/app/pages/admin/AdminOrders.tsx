@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Clock, Package, CheckCircle, Search, X, MapPin, Truck, Phone, Mail, Send, WalletCards, AlertTriangle } from "lucide-react";
+import { Clock, Package, CheckCircle, Search, X, MapPin, Truck, Phone, Mail, Send, WalletCards, AlertTriangle, Trash2 } from "lucide-react";
 import { apiRequest } from "../../api/client";
 import { ApiOrder } from "../../api/types";
 import { useI18n } from "../../i18n";
@@ -41,6 +41,7 @@ export function AdminOrders() {
   const [trackingUrl, setTrackingUrl] = useState("");
   const [trackingMessage, setTrackingMessage] = useState("");
   const [trackingSending, setTrackingSending] = useState(false);
+  const [paymentCanceling, setPaymentCanceling] = useState(false);
 
   useEffect(() => {
     void loadOrders();
@@ -73,20 +74,41 @@ export function AdminOrders() {
   });
 
   async function updateStatus(id: string, status: OrderStatus) {
+    let next: AdminOrder | null = null;
     try {
       const updated = await apiRequest<ApiOrder>(`/api/v1/admin/orders/${id}/status`, {
         method: "PATCH",
         body: JSON.stringify({ status }),
       });
-      const next = toAdminOrder(updated);
-      setOrders((prev) => prev.map((o) => (o.id === id ? next : o)));
+      const nextOrder = toAdminOrder(updated);
+      next = nextOrder;
+      setOrders((prev) => prev.map((o) => (o.id === id ? nextOrder : o)));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("admin.orderStatusError"));
       return;
     }
-    if (selectedOrder?.id === id) {
+    if (next && selectedOrder?.id === id) {
       setSelectedOrder(next);
+    }
+  }
+
+  async function cancelSelectedPayment() {
+    if (!selectedOrder?.payment || !canCancelOrderPayment(selectedOrder)) return;
+    if (!window.confirm(t("admin.cancelPaymentConfirm"))) return;
+    setPaymentCanceling(true);
+    try {
+      const updated = await apiRequest<ApiOrder>(`/api/v1/admin/orders/${selectedOrder.id}/cancel-payment`, {
+        method: "POST",
+      });
+      const next = toAdminOrder(updated);
+      setOrders((prev) => prev.map((o) => (o.id === next.id ? next : o)));
+      setSelectedOrder(next);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("admin.cancelPaymentError"));
+    } finally {
+      setPaymentCanceling(false);
     }
   }
 
@@ -231,7 +253,7 @@ export function AdminOrders() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4"
+            className="fkh-modal-overlay fixed inset-0 z-50 flex items-end md:items-center justify-center p-4"
             style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)" }}
             onClick={() => setSelectedOrder(null)}
           >
@@ -239,7 +261,7 @@ export function AdminOrders() {
               initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 40 }}
-              className="w-full max-w-md max-h-[88vh] overflow-y-auto rounded-2xl"
+              className="fkh-modal-panel w-full max-w-md overflow-y-auto rounded-2xl"
               style={{ background: "#111827", border: "1px solid rgba(255,255,255,0.08)" }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -314,6 +336,25 @@ export function AdminOrders() {
                       <DeliveryLine label="Payment ID" value={selectedOrder.payment.providerPaymentId} />
                       <DeliveryLine label="Paid at" value={selectedOrder.payment.paidAt ? new Date(selectedOrder.payment.paidAt).toLocaleString(locale) : undefined} />
                     </div>
+                    {selectedOrder.status === "pending" && (
+                      <button
+                        type="button"
+                        onClick={cancelSelectedPayment}
+                        disabled={!canCancelOrderPayment(selectedOrder) || paymentCanceling}
+                        className="mt-3 w-full flex items-center justify-center gap-2 rounded-xl py-3 transition-all"
+                        style={{
+                          background: canCancelOrderPayment(selectedOrder) ? "rgba(239,68,68,0.12)" : "rgba(255,255,255,0.06)",
+                          border: `1px solid ${canCancelOrderPayment(selectedOrder) ? "rgba(239,68,68,0.32)" : "rgba(255,255,255,0.08)"}`,
+                          color: canCancelOrderPayment(selectedOrder) ? "#ef4444" : "#6B7280",
+                          fontSize: 13,
+                          fontWeight: 800,
+                          opacity: paymentCanceling ? 0.75 : 1,
+                        }}
+                      >
+                        <Trash2 size={15} />
+                        {paymentCanceling ? t("admin.saving") : canCancelOrderPayment(selectedOrder) ? t("admin.cancelPayment") : t("admin.cancelPaymentUnavailable")}
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -512,6 +553,14 @@ function paymentStatusBg(status: string) {
   if (status === "expired") return "rgba(107,114,128,0.12)";
   if (status === "failed") return "rgba(239,68,68,0.12)";
   return "rgba(59,130,246,0.12)";
+}
+
+function canCancelOrderPayment(order: AdminOrder) {
+  const payment = order.payment;
+  if (!payment || order.status !== "pending") return false;
+  const actuallyPaid = payment.actuallyPaid ?? 0;
+  const pendingAmount = payment.pendingAmount ?? 0;
+  return actuallyPaid <= 0 && pendingAmount <= 0 && !["confirming", "partially_paid", "finished"].includes(payment.providerStatus);
 }
 
 function formatCrypto(value?: number | null) {

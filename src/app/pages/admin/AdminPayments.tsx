@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { CheckCircle, Clock, AlertTriangle, Search, X, Copy, ExternalLink, WalletCards } from "lucide-react";
+import { CheckCircle, Clock, AlertTriangle, Search, X, Copy, ExternalLink, WalletCards, Trash2 } from "lucide-react";
 import { apiRequest } from "../../api/client";
 import { ApiAdminPayment } from "../../api/types";
 import { useI18n } from "../../i18n";
@@ -23,6 +23,7 @@ export function AdminPayments() {
   const [filterStatus, setFilterStatus] = useState<PaymentStatus | "all">("all");
   const [selectedPayment, setSelectedPayment] = useState<ApiAdminPayment | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cancelingPaymentId, setCancelingPaymentId] = useState<string | null>(null);
 
   useEffect(() => {
     void loadPayments();
@@ -35,6 +36,22 @@ export function AdminPayments() {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Payments error");
+    }
+  }
+
+  async function cancelPayment(payment: ApiAdminPayment) {
+    if (!canCancelAdminPayment(payment)) return;
+    if (!window.confirm(t("admin.cancelPaymentConfirm"))) return;
+    setCancelingPaymentId(payment.id);
+    try {
+      await apiRequest(`/api/v1/admin/payments/${payment.id}/cancel`, { method: "POST" });
+      setPayments((current) => current.filter((item) => item.id !== payment.id));
+      setSelectedPayment(null);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("admin.cancelPaymentError"));
+    } finally {
+      setCancelingPaymentId(null);
     }
   }
 
@@ -168,6 +185,9 @@ export function AdminPayments() {
           <PaymentModal
             payment={selectedPayment}
             locale={locale}
+            t={t}
+            canceling={cancelingPaymentId === selectedPayment.id}
+            onCancel={() => cancelPayment(selectedPayment)}
             onClose={() => setSelectedPayment(null)}
           />
         )}
@@ -179,21 +199,28 @@ export function AdminPayments() {
 function PaymentModal({
   payment,
   locale,
+  t,
+  canceling,
+  onCancel,
   onClose,
 }: {
   payment: ApiAdminPayment;
   locale: string;
+  t: (key: string, values?: Record<string, string | number>) => string;
+  canceling: boolean;
+  onCancel: () => void;
   onClose: () => void;
 }) {
   const cfg = STATUS_CONFIG[payment.providerStatus] ?? STATUS_CONFIG.waiting;
   const Icon = cfg.icon;
+  const canCancel = canCancelAdminPayment(payment);
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4"
+      className="fkh-modal-overlay fixed inset-0 z-50 flex items-end md:items-center justify-center p-4"
       style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)" }}
       onClick={onClose}
     >
@@ -201,7 +228,7 @@ function PaymentModal({
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 40 }}
-        className="w-full max-w-lg max-h-[88vh] overflow-y-auto rounded-2xl"
+        className="fkh-modal-panel w-full max-w-lg overflow-y-auto rounded-2xl"
         style={{ background: "#111827", border: "1px solid rgba(255,255,255,0.08)" }}
         onClick={(event) => event.stopPropagation()}
       >
@@ -260,6 +287,26 @@ function PaymentModal({
               </a>
             </div>
           </div>
+
+          {payment.order.status === "pending" && (
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={!canCancel || canceling}
+              className="mt-4 w-full flex items-center justify-center gap-2 rounded-xl py-3 transition-all"
+              style={{
+                background: canCancel ? "rgba(239,68,68,0.12)" : "rgba(255,255,255,0.06)",
+                border: `1px solid ${canCancel ? "rgba(239,68,68,0.32)" : "rgba(255,255,255,0.08)"}`,
+                color: canCancel ? "#ef4444" : "#6B7280",
+                fontSize: 13,
+                fontWeight: 800,
+                opacity: canceling ? 0.75 : 1,
+              }}
+            >
+              <Trash2 size={15} />
+              {canceling ? t("admin.saving") : canCancel ? t("admin.cancelPayment") : t("admin.cancelPaymentUnavailable")}
+            </button>
+          )}
         </div>
       </motion.div>
     </motion.div>
@@ -324,4 +371,11 @@ function formatFiat(value: number) {
     minimumFractionDigits: value % 1 === 0 ? 0 : 2,
     maximumFractionDigits: 2,
   });
+}
+
+function canCancelAdminPayment(payment: ApiAdminPayment) {
+  if (payment.order.status !== "pending") return false;
+  const actuallyPaid = payment.actuallyPaid ?? 0;
+  const pendingAmount = payment.pendingAmount ?? 0;
+  return actuallyPaid <= 0 && pendingAmount <= 0 && !["confirming", "partially_paid", "finished"].includes(payment.providerStatus);
 }

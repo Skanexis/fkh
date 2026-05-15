@@ -10,6 +10,7 @@ import { serializeProduct, serializeShippingMethod, serializeSiteSettings } from
 import { assertOrderTransition, serializeOrder } from "../orders/orders.routes.js";
 import { serializeAuthUser } from "../auth/auth.service.js";
 import { sendTelegramJson } from "../telegram/telegram.service.js";
+import { cryptoPaymentHasIncomingFunds } from "../payments/crypto-payments.service.js";
 
 const db = prisma as typeof prisma & {
   siteSettings: {
@@ -325,6 +326,23 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     };
   });
 
+  app.post("/api/v1/admin/orders/:id/cancel-payment", async (request) => {
+    const admin = await requireAdmin(request);
+    const id = parseId(request);
+    const order = await cancelAdminOrderPayment(request, admin.id, id);
+    return { data: serializeOrder(order) };
+  });
+
+  app.post("/api/v1/admin/payments/:id/cancel", async (request) => {
+    const admin = await requireAdmin(request);
+    const id = parseId(request);
+    const payment = await prisma.cryptoPayment.findUnique({ where: { id }, select: { orderId: true } });
+    if (!payment) throw notFound("Payment not found");
+
+    const order = await cancelAdminOrderPayment(request, admin.id, payment.orderId);
+    return { data: serializeOrder(order) };
+  });
+
   app.patch("/api/v1/admin/orders/:id/status", async (request) => {
     const admin = await requireAdmin(request);
     const id = parseId(request);
@@ -601,6 +619,42 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     await audit(request, admin.id, "shipping_method.disable", "ShippingMethod", id, null, method);
     return { data: serializeShippingMethod(method) };
   });
+}
+
+async function cancelAdminOrderPayment(request: FastifyRequest, adminId: string, orderId: string) {
+  const before = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { cryptoPayment: true },
+  });
+  if (!before) throw notFound("Order not found");
+  if (before.status !== OrderStatus.pending) {
+    throw badRequest("Only pending orders can have their payment cancelled");
+  }
+  if (!before.cryptoPayment) {
+    throw badRequest("Order has no active payment");
+  }
+  if (cryptoPaymentHasIncomingFunds(before.cryptoPayment)) {
+    throw badRequest("Payment already has incoming funds. Resolve it manually before cancellation.");
+  }
+
+  const now = new Date();
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.order.update({
+      where: { id: orderId },
+      data: {
+        status: OrderStatus.cancelled,
+        cancelledAt: now,
+      },
+    });
+    await tx.cryptoPayment.deleteMany({ where: { orderId } });
+    return tx.order.findUniqueOrThrow({
+      where: { id: orderId },
+      include: { items: true, cryptoPayment: true },
+    });
+  });
+
+  await audit(request, adminId, "payment.cancel", "Order", orderId, before, updated);
+  return updated;
 }
 
 const contactPayload = z.object({

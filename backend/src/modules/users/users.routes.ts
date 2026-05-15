@@ -6,6 +6,7 @@ import { badRequest, notFound } from "../../common/http-error.js";
 import { prisma } from "../../db/prisma.js";
 import { serializeAuthUser } from "../auth/auth.service.js";
 import { serializeOrder } from "../orders/orders.routes.js";
+import { cryptoPaymentHasIncomingFunds } from "../payments/crypto-payments.service.js";
 
 const updateMeBody = z.object({
   name: z.string().min(2).max(120).optional(),
@@ -95,15 +96,4 @@ export async function registerUserRoutes(app: FastifyInstance) {
 
     return { data: serializeOrder(updated) };
   });
-}
-
-function cryptoPaymentHasIncomingFunds(payment: any) {
-  const actuallyPaid = Number(payment.actuallyPaid ?? 0);
-  const raw = typeof payment.rawProviderPayload === "object" && payment.rawProviderPayload ? payment.rawProviderPayload : null;
-  const pendingAmount = raw && "lastPendingReceived" in raw ? Number(raw.lastPendingReceived) : 0;
-  return (
-    Number.isFinite(actuallyPaid) && actuallyPaid > 0
-  ) || (
-    Number.isFinite(pendingAmount) && pendingAmount > 0
-  ) || ["confirming", "partially_paid", "finished"].includes(payment.providerStatus);
 }

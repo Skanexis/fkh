@@ -217,6 +217,20 @@ body {
   transform: translateX(-50%);
 }
 
+.fkh-modal-overlay {
+  z-index: 80;
+}
+
+.fkh-app-frame .fkh-modal-overlay {
+  top: var(--fkh-shell-edge);
+  bottom: var(--fkh-shell-edge);
+  min-height: auto;
+}
+
+.fkh-modal-panel {
+  max-height: min(88dvh, calc(var(--fkh-shell-height) - 32px));
+}
+
 .fkh-frame-corner {
   position: fixed;
   z-index: 80;

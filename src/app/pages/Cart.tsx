@@ -46,10 +46,10 @@ const initialShippingForm: ShippingForm = {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const fallbackCryptoMethods: ApiCryptoPaymentMethod[] = [
-  { code: "btc", label: "BTC", network: "Bitcoin" },
-  { code: "usdt_erc20", label: "USDT (ETH)", network: "Ethereum ERC-20" },
-  { code: "usdt_trc20", label: "USDT (TRON)", network: "TRON TRC-20" },
-  { code: "usdc_erc20", label: "USDC (ETH)", network: "Ethereum ERC-20" },
+  { code: "btc", label: "BTC", network: "Bitcoin", available: false, configured: false, totalSlots: 0, freeSlots: 0 },
+  { code: "usdt_erc20", label: "USDT (ETH)", network: "Ethereum ERC-20", available: false, configured: false, totalSlots: 0, freeSlots: 0 },
+  { code: "usdt_trc20", label: "USDT (TRON)", network: "TRON TRC-20", available: false, configured: false, totalSlots: 0, freeSlots: 0 },
+  { code: "usdc_erc20", label: "USDC (ETH)", network: "Ethereum ERC-20", available: false, configured: false, totalSlots: 0, freeSlots: 0 },
 ];
 
 export function Cart() {
@@ -110,7 +110,10 @@ export function Cart() {
     let cancelled = false;
 
     async function loadCryptoMethods() {
-      const methods = await apiRequest<ApiCryptoPaymentMethod[]>("/api/v1/payments/crypto/methods");
+      const methods = await apiRequest<ApiCryptoPaymentMethod[]>(
+        `/api/v1/payments/crypto/methods?ts=${Date.now()}`,
+        { cache: "no-store" },
+      );
       if (cancelled || methods.length === 0) return;
       setCryptoMethods(methods);
       setSelectedPaymentCurrency((current) => {
@@ -585,7 +588,7 @@ export function Cart() {
                   <span style={{ color: "#A0A0A0", fontSize: 12, fontWeight: 600 }}>{t("cart.paymentMethod")} *</span>
                   <span style={{ color: "#6B7280", fontSize: 11 }}>{t("cart.walletAvailability")}</span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                <div className="grid grid-cols-2 gap-2 mt-2">
                   {cryptoMethods.map((method) => (
                     <PaymentMethodCard
                       key={method.code}
@@ -834,9 +837,9 @@ function PaymentMethodCard({
       type="button"
       onClick={onSelect}
       disabled={!available}
-      className="rounded-xl p-3 text-left transition-all"
+      className="rounded-xl p-2.5 text-left transition-all"
       style={{
-        minHeight: 132,
+        minHeight: 84,
         background: active
           ? "linear-gradient(135deg, rgba(255,77,109,0.16), rgba(255,154,139,0.08))"
           : "rgba(255,255,255,0.045)",
@@ -844,13 +847,12 @@ function PaymentMethodCard({
         opacity: available ? 1 : 0.62,
       }}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="flex items-center gap-2 min-w-0">
           <span
             className="rounded-lg flex items-center justify-center flex-shrink-0"
             style={{
-              width: 32,
-              height: 32,
+              width: 30,
+              height: 30,
               background: active ? "rgba(255,77,109,0.18)" : "rgba(255,255,255,0.06)",
               border: "1px solid rgba(255,255,255,0.07)",
             }}
@@ -858,38 +860,40 @@ function PaymentMethodCard({
             <Wallet size={16} color={active ? "#FF4D6D" : "#A0A0A0"} />
           </span>
           <div className="min-w-0">
-            <p style={{ color: active ? "#FF4D6D" : "#FFFFFF", fontSize: 13, fontWeight: 800 }}>
+            <p className="truncate" style={{ color: active ? "#FF4D6D" : "#FFFFFF", fontSize: 13, fontWeight: 800 }}>
               {method.label}
             </p>
             <p className="truncate" style={{ color: "#A0A0A0", fontSize: 10, marginTop: 1 }}>
               {method.network}
             </p>
           </div>
-        </div>
+      </div>
+
+      <div className="mt-2 flex items-center justify-between gap-2">
         <span
-          className="rounded-full px-2 py-1 flex-shrink-0"
+          className="rounded-full px-2 py-0.5 flex-shrink-0"
           style={{
             color: statusColor,
             background: `${statusColor}1f`,
             border: `1px solid ${statusColor}40`,
-            fontSize: 10,
+            fontSize: 9,
             fontWeight: 800,
+            maxWidth: "calc(100% - 34px)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
           }}
         >
           {statusLabel}
         </span>
-      </div>
-
-      <div className="mt-3 flex items-center justify-between">
-        <span style={{ color: "#6B7280", fontSize: 10, fontWeight: 700 }}>{t("cart.walletSlots")}</span>
         <span style={{ color: available ? "#E5E7EB" : "#A0A0A0", fontSize: 11, fontWeight: 800 }}>
           {freeSlots}/{totalSlots}
         </span>
       </div>
 
-      {method.wallets && method.wallets.length > 0 && (
+      {active && method.wallets && method.wallets.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {method.wallets.slice(0, 4).map((wallet) => {
+          {method.wallets.slice(0, 2).map((wallet) => {
             const walletFree = wallet.status === "available";
             return (
               <span
@@ -907,9 +911,9 @@ function PaymentMethodCard({
               </span>
             );
           })}
-          {method.wallets.length > 4 && (
+          {method.wallets.length > 2 && (
             <span style={{ color: "#6B7280", fontSize: 10, alignSelf: "center" }}>
-              +{method.wallets.length - 4}
+              +{method.wallets.length - 2}
             </span>
           )}
         </div>
