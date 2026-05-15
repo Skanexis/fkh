@@ -4,6 +4,7 @@ import { CheckCircle, Clock, AlertTriangle, Search, X, Copy, ExternalLink, Walle
 import { apiRequest } from "../../api/client";
 import { ApiAdminPayment } from "../../api/types";
 import { useI18n } from "../../i18n";
+import { useBodyScrollLock } from "../../components/useBodyScrollLock";
 
 type PaymentStatus = "waiting" | "confirming" | "partially_paid" | "finished" | "expired" | "failed";
 
@@ -28,6 +29,8 @@ export function AdminPayments() {
   useEffect(() => {
     void loadPayments();
   }, []);
+
+  useBodyScrollLock(Boolean(selectedPayment));
 
   async function loadPayments() {
     try {
@@ -326,6 +329,14 @@ function PaymentModal({
             <Trash2 size={15} />
             {canceling ? t("admin.saving") : canCancel ? t("admin.cancelPayment") : t("admin.cancelPaymentUnavailable")}
           </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="mt-2 w-full rounded-xl py-3"
+            style={{ background: "rgba(255,255,255,0.07)", color: "#9CA3AF", fontSize: 13, fontWeight: 800 }}
+          >
+            {t("admin.cancel")}
+          </button>
         </div>
       </motion.div>
     </motion.div>
@@ -396,5 +407,5 @@ function canCancelAdminPayment(payment: ApiAdminPayment) {
   if (payment.order.status !== "pending") return false;
   const actuallyPaid = payment.actuallyPaid ?? 0;
   const pendingAmount = payment.pendingAmount ?? 0;
-  return actuallyPaid <= 0 && pendingAmount <= 0 && !["confirming", "partially_paid", "finished"].includes(payment.providerStatus);
+  return actuallyPaid <= 0 && pendingAmount <= 0 && payment.providerStatus !== "finished";
 }

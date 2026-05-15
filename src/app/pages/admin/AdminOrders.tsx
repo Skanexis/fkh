@@ -5,6 +5,7 @@ import { Clock, Package, CheckCircle, Search, X, MapPin, Truck, Phone, Mail, Sen
 import { apiRequest } from "../../api/client";
 import { ApiOrder } from "../../api/types";
 import { useI18n } from "../../i18n";
+import { useBodyScrollLock } from "../../components/useBodyScrollLock";
 
 type OrderStatus = "pending" | "accepted" | "completed" | "cancelled";
 
@@ -46,6 +47,8 @@ export function AdminOrders() {
   useEffect(() => {
     void loadOrders();
   }, []);
+
+  useBodyScrollLock(Boolean(selectedOrder));
 
   useEffect(() => {
     setTrackingCode(selectedOrder?.tracking?.code ?? "");
@@ -471,6 +474,14 @@ export function AdminOrders() {
                     );
                   })}
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedOrder(null)}
+                  className="mt-3 w-full rounded-xl py-3"
+                  style={{ background: "rgba(255,255,255,0.07)", color: "#9CA3AF", fontSize: 13, fontWeight: 800 }}
+                >
+                  {t("admin.cancel")}
+                </button>
               </div>
             </motion.div>
           </motion.div>
@@ -558,7 +569,7 @@ function canCancelOrderPayment(order: AdminOrder) {
   if (!payment || order.status !== "pending") return false;
   const actuallyPaid = payment.actuallyPaid ?? 0;
   const pendingAmount = payment.pendingAmount ?? 0;
-  return actuallyPaid <= 0 && pendingAmount <= 0 && !["confirming", "partially_paid", "finished"].includes(payment.providerStatus);
+  return actuallyPaid <= 0 && pendingAmount <= 0 && payment.providerStatus !== "finished";
 }
 
 function formatCrypto(value?: number | null) {

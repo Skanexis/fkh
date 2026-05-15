@@ -4,6 +4,7 @@ import { Search, X, User, ShoppingBag, TrendingUp, Mail, Ban, CheckCircle } from
 import { apiRequest } from "../../api/client";
 import { ApiUser } from "../../api/types";
 import { useI18n } from "../../i18n";
+import { useBodyScrollLock } from "../../components/useBodyScrollLock";
 
 interface AdminUser {
   id: string;
@@ -38,6 +39,8 @@ export function AdminUsers() {
   useEffect(() => {
     void loadUsers();
   }, []);
+
+  useBodyScrollLock(Boolean(selectedUser));
 
   async function loadUsers() {
     try {
@@ -358,6 +361,14 @@ export function AdminUsers() {
                     )}
                   </button>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedUser(null)}
+                  className="mt-3 w-full rounded-xl py-3"
+                  style={{ background: "rgba(255,255,255,0.07)", color: "#9CA3AF", fontSize: 13, fontWeight: 800 }}
+                >
+                  {t("admin.cancel")}
+                </button>
               </div>
             </motion.div>
           </motion.div>

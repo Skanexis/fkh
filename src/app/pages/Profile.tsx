@@ -10,6 +10,7 @@ import { ApiOrder } from "../api/types";
 import { toProfileOrder } from "../api/adapters";
 import { useI18n } from "../i18n";
 import { BannedNotice } from "../components/BannedNotice";
+import { useBodyScrollLock } from "../components/useBodyScrollLock";
 
 const STATUS_CONFIG = {
   pending: { labelKey: "status.pending", color: "#FF4D6D", bg: "rgba(255,77,109,0.12)" },
@@ -57,6 +58,8 @@ export function Profile() {
   useEffect(() => {
     void loadOrders();
   }, [isAuthenticated, user?.status]);
+
+  useBodyScrollLock(Boolean(selectedOrder));
 
   useEffect(() => {
     if (!selectedOrder) return;
@@ -550,6 +553,14 @@ function PaymentModal({
                   {cancelingPayment ? t("admin.saving") : canCancel ? t("cart.cancelPayment") : t("cart.cancelPaymentUnavailable")}
                 </button>
               )}
+              <button
+                type="button"
+                onClick={onClose}
+                className="mt-2 w-full py-3 rounded-xl"
+                style={{ background: "rgba(255,255,255,0.07)", color: "#A0A0A0", fontWeight: 800 }}
+              >
+                {t("admin.cancel")}
+              </button>
             </>
           ) : (
             <div className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.04)" }}>
@@ -625,5 +636,5 @@ function canCancelPayment(order: ProfileOrder) {
   if (!payment || order.status !== "pending") return false;
   const actuallyPaid = payment.actuallyPaid ?? 0;
   const pendingAmount = payment.pendingAmount ?? 0;
-  return actuallyPaid <= 0 && pendingAmount <= 0 && !["confirming", "partially_paid", "finished"].includes(payment.providerStatus);
+  return actuallyPaid <= 0 && pendingAmount <= 0 && payment.providerStatus !== "finished";
 }

@@ -15,6 +15,7 @@ export const CRYPTO_PAYMENT_METHODS = [
     addressEnv: "CRYPTO_BTC_ADDRESSES",
     priceId: "bitcoin",
     decimals: 8,
+    invoiceDecimals: 8,
     minMarkerUnits: 1,
     maxMarkerUnits: 999,
   },
@@ -26,6 +27,7 @@ export const CRYPTO_PAYMENT_METHODS = [
     addressEnv: "CRYPTO_USDT_ERC20_ADDRESSES",
     priceId: "tether",
     decimals: 6,
+    invoiceDecimals: 2,
     contractAddress: "0xdac17f958d2ee523a2206206994597c13d831ec7",
     minMarkerUnits: 1,
     maxMarkerUnits: 9999,
@@ -38,6 +40,7 @@ export const CRYPTO_PAYMENT_METHODS = [
     addressEnv: "CRYPTO_USDT_TRC20_ADDRESSES",
     priceId: "tether",
     decimals: 6,
+    invoiceDecimals: 2,
     contractAddress: "TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj",
     minMarkerUnits: 1,
     maxMarkerUnits: 9999,
@@ -50,6 +53,7 @@ export const CRYPTO_PAYMENT_METHODS = [
     addressEnv: "CRYPTO_USDC_ERC20_ADDRESSES",
     priceId: "usd-coin",
     decimals: 6,
+    invoiceDecimals: 2,
     contractAddress: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
     minMarkerUnits: 1,
     maxMarkerUnits: 9999,
@@ -132,6 +136,7 @@ export async function createCryptoPayment(input: CreateCryptoPaymentInput) {
     eurAmount: input.amount,
     priceId: method.priceId,
     decimals: method.decimals,
+    invoiceDecimals: method.invoiceDecimals,
     publicId: input.publicId,
     minMarkerUnits: method.minMarkerUnits,
     maxMarkerUnits: method.maxMarkerUnits,
@@ -144,14 +149,14 @@ export async function createCryptoPayment(input: CreateCryptoPaymentInput) {
       provider: "self_custody",
       providerPaymentId: `self:${input.publicId}`,
       providerStatus: "waiting",
-      payAmount: payAmount.toFixed(method.decimals),
+      payAmount: payAmount.toFixed(method.invoiceDecimals),
       payAddress,
       expiresAt,
       rawProviderPayload: {
         publicId: input.publicId,
         priceSource: "coingecko",
         paymentAddressPool: method.addressEnv,
-        uniqueAmountMarker: true,
+        uniqueAmountMarker: method.invoiceDecimals === method.decimals,
       },
     },
   });
@@ -198,6 +203,7 @@ async function quoteCryptoAmount(input: {
   eurAmount: number;
   priceId: string;
   decimals: number;
+  invoiceDecimals: number;
   publicId: string;
   minMarkerUnits: number;
   maxMarkerUnits: number;
@@ -211,14 +217,21 @@ async function quoteCryptoAmount(input: {
 
   const scale = 10 ** input.decimals;
   const baseUnits = Math.ceil((input.eurAmount / eurPrice) * scale);
-  const markerUnits = uniqueMarkerUnits(input.publicId, input.minMarkerUnits, input.maxMarkerUnits);
-  return (baseUnits + markerUnits) / scale;
+  const markerUnits = input.invoiceDecimals === input.decimals
+    ? uniqueMarkerUnits(input.publicId, input.minMarkerUnits, input.maxMarkerUnits)
+    : 0;
+  return ceilToDecimals((baseUnits + markerUnits) / scale, input.invoiceDecimals);
 }
 
 function uniqueMarkerUnits(publicId: string, minUnits: number, maxUnits: number) {
   const digest = crypto.createHash("sha256").update(publicId).digest();
   const value = digest.readUInt32BE(0);
   return minUnits + (value % Math.max(1, maxUnits - minUnits + 1));
+}
+
+function ceilToDecimals(value: number, decimals: number) {
+  const scale = 10 ** decimals;
+  return Math.ceil((value + Number.EPSILON) * scale) / scale;
 }
 
 function paymentTtlMinutes(code: CryptoPaymentCode) {
@@ -511,6 +524,7 @@ export function serializeCryptoPayment(payment: any) {
   if (!payment) return null;
   const remainingAmount = remainingCryptoAmount(payment);
   const pendingAmount = pendingCryptoAmount(payment);
+  const invoiceDecimals = getCryptoPaymentMethod(payment.currencyCode)?.invoiceDecimals ?? 12;
   return {
     id: payment.id,
     provider: payment.provider,
@@ -522,18 +536,32 @@ export function serializeCryptoPayment(payment: any) {
     network: payment.network,
     priceAmount: money(payment.priceAmount),
     priceCurrency: payment.priceCurrency,
-    payAmount: payment.payAmount === null || payment.payAmount === undefined ? null : Number(payment.payAmount),
+    payAmount: nullableCryptoAmount(payment.payAmount, invoiceDecimals, "ceil"),
     payAddress: payment.payAddress,
     payinExtraId: payment.payinExtraId,
-    actuallyPaid: payment.actuallyPaid === null || payment.actuallyPaid === undefined ? null : Number(payment.actuallyPaid),
-    pendingAmount,
-    remainingAmount,
+    actuallyPaid: nullableCryptoAmount(payment.actuallyPaid, invoiceDecimals, "round"),
+    pendingAmount: cryptoAmount(pendingAmount, invoiceDecimals, "round"),
+    remainingAmount: nullableCryptoAmount(remainingAmount, invoiceDecimals, "ceil"),
     isUnderpaid: remainingAmount !== null && remainingAmount > 0 && payment.providerStatus === "partially_paid",
     paidAt: payment.paidAt?.toISOString() ?? null,
     expiresAt: payment.expiresAt?.toISOString() ?? null,
     createdAt: payment.createdAt.toISOString(),
     updatedAt: payment.updatedAt.toISOString(),
   };
+}
+
+function nullableCryptoAmount(value: unknown, decimals: number, mode: "ceil" | "round") {
+  if (value === null || value === undefined) return null;
+  return cryptoAmount(Number(value), decimals, mode);
+}
+
+function cryptoAmount(value: number, decimals: number, mode: "ceil" | "round") {
+  if (!Number.isFinite(value)) return 0;
+  const scale = 10 ** decimals;
+  const scaled = mode === "ceil"
+    ? Math.ceil((value + Number.EPSILON) * scale)
+    : Math.round(value * scale);
+  return scaled / scale;
 }
 
 export function cryptoPaymentHasIncomingFunds(payment: any) {
@@ -543,7 +571,7 @@ export function cryptoPaymentHasIncomingFunds(payment: any) {
     Number.isFinite(actuallyPaid) && actuallyPaid > 0
   ) || (
     Number.isFinite(pendingAmount) && pendingAmount > 0
-  ) || ["confirming", "partially_paid", "finished"].includes(payment.providerStatus);
+  ) || payment.providerStatus === "finished";
 }
 
 function pendingCryptoAmount(payment: any) {

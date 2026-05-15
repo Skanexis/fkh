@@ -7,6 +7,7 @@ import { apiRequest, apiUploadFile } from "../../api/client";
 import { ApiCategory, ApiMediaAsset, ApiProduct } from "../../api/types";
 import { toProduct } from "../../api/adapters";
 import { useI18n } from "../../i18n";
+import { useBodyScrollLock } from "../../components/useBodyScrollLock";
 
 type EditableProduct = Omit<Product, "id" | "rating" | "reviews"> & { id: string };
 const allowedMediaMimes = new Set(["image/jpeg", "image/png", "image/webp", "video/mp4", "video/webm"]);
@@ -32,6 +33,8 @@ export function AdminProducts() {
   useEffect(() => {
     void loadProducts();
   }, []);
+
+  useBodyScrollLock(Boolean((showModal && editingProduct) || deleteId));
 
   async function loadProducts() {
     try {

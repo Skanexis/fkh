@@ -10,7 +10,7 @@ import { serializeProduct, serializeShippingMethod, serializeSiteSettings } from
 import { assertOrderTransition, serializeOrder } from "../orders/orders.routes.js";
 import { serializeAuthUser } from "../auth/auth.service.js";
 import { sendTelegramJson } from "../telegram/telegram.service.js";
-import { cryptoPaymentHasIncomingFunds } from "../payments/crypto-payments.service.js";
+import { cryptoPaymentHasIncomingFunds, getCryptoPaymentMethod } from "../payments/crypto-payments.service.js";
 
 const db = prisma as typeof prisma & {
   siteSettings: {
@@ -842,6 +842,7 @@ function buildUserPaymentCurrencies(orders: Array<{ totalAmount: unknown; crypto
 
 function serializeAdminPayment(payment: any) {
   const remainingAmount = remainingCryptoAmount(payment);
+  const invoiceDecimals = getCryptoPaymentMethod(payment.currencyCode)?.invoiceDecimals ?? 12;
   return {
     id: payment.id,
     provider: payment.provider,
@@ -853,18 +854,32 @@ function serializeAdminPayment(payment: any) {
     network: payment.network,
     priceAmount: money(payment.priceAmount),
     priceCurrency: payment.priceCurrency,
-    payAmount: nullableDecimalNumber(payment.payAmount),
+    payAmount: nullableCryptoAmount(payment.payAmount, invoiceDecimals, "ceil"),
     payAddress: payment.payAddress,
     payinExtraId: payment.payinExtraId,
-    actuallyPaid: nullableDecimalNumber(payment.actuallyPaid),
-    pendingAmount: pendingCryptoAmount(payment),
-    remainingAmount,
+    actuallyPaid: nullableCryptoAmount(payment.actuallyPaid, invoiceDecimals, "round"),
+    pendingAmount: cryptoAmount(pendingCryptoAmount(payment), invoiceDecimals, "round"),
+    remainingAmount: nullableCryptoAmount(remainingAmount, invoiceDecimals, "ceil"),
     isUnderpaid: remainingAmount !== null && remainingAmount > 0 && payment.providerStatus === "partially_paid",
     paidAt: payment.paidAt?.toISOString() ?? null,
     expiresAt: payment.expiresAt?.toISOString() ?? null,
     createdAt: payment.createdAt.toISOString(),
     updatedAt: payment.updatedAt.toISOString(),
   };
+}
+
+function nullableCryptoAmount(value: unknown, decimals: number, mode: "ceil" | "round") {
+  if (value === null || value === undefined) return null;
+  return cryptoAmount(Number(value), decimals, mode);
+}
+
+function cryptoAmount(value: number, decimals: number, mode: "ceil" | "round") {
+  if (!Number.isFinite(value)) return 0;
+  const scale = 10 ** decimals;
+  const scaled = mode === "ceil"
+    ? Math.ceil((value + Number.EPSILON) * scale)
+    : Math.round(value * scale);
+  return scaled / scale;
 }
 
 function pendingCryptoAmount(payment: any) {
