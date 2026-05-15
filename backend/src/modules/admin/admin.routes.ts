@@ -627,9 +627,6 @@ async function cancelAdminOrderPayment(request: FastifyRequest, adminId: string,
     include: { cryptoPayment: true },
   });
   if (!before) throw notFound("Order not found");
-  if (before.status !== OrderStatus.pending) {
-    throw badRequest("Only pending orders can have their payment cancelled");
-  }
   if (!before.cryptoPayment) {
     throw badRequest("Order has no active payment");
   }
@@ -639,14 +636,18 @@ async function cancelAdminOrderPayment(request: FastifyRequest, adminId: string,
 
   const now = new Date();
   const updated = await prisma.$transaction(async (tx) => {
-    await tx.order.update({
-      where: { id: orderId },
-      data: {
-        status: OrderStatus.cancelled,
-        cancelledAt: now,
-      },
-    });
+    if (before.status === OrderStatus.pending) {
+      await tx.order.update({
+        where: { id: orderId },
+        data: {
+          status: OrderStatus.cancelled,
+          cancelledAt: now,
+        },
+      });
+    }
+
     await tx.cryptoPayment.deleteMany({ where: { orderId } });
+
     return tx.order.findUniqueOrThrow({
       where: { id: orderId },
       include: { items: true, cryptoPayment: true },

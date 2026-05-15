@@ -566,7 +566,7 @@ function paymentStatusBg(status: string) {
 
 function canCancelOrderPayment(order: AdminOrder) {
   const payment = order.payment;
-  if (!payment || order.status !== "pending") return false;
+  if (!payment) return false;
   const actuallyPaid = payment.actuallyPaid ?? 0;
   const pendingAmount = payment.pendingAmount ?? 0;
   return actuallyPaid <= 0 && pendingAmount <= 0 && payment.providerStatus !== "finished";
