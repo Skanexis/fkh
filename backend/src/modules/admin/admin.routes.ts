@@ -331,20 +331,30 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     const body = z.object({ status: z.nativeEnum(OrderStatus) }).safeParse(request.body);
     if (!body.success) throw badRequest("Invalid status payload", body.error.flatten());
 
-    const before = await prisma.order.findUnique({ where: { id } });
+    const before = await prisma.order.findUnique({ where: { id }, include: { cryptoPayment: true } });
     if (!before) throw notFound("Order not found");
     assertOrderTransition(before.status, body.data.status);
 
     const now = new Date();
-    const order = await prisma.order.update({
-      where: { id },
-      data: {
-        status: body.data.status,
-        acceptedAt: body.data.status === "accepted" ? now : before.acceptedAt,
-        completedAt: body.data.status === "completed" ? now : before.completedAt,
-        cancelledAt: body.data.status === "cancelled" ? now : before.cancelledAt,
-      },
-      include: { items: true, cryptoPayment: true },
+    const order = await prisma.$transaction(async (tx) => {
+      await tx.order.update({
+        where: { id },
+        data: {
+          status: body.data.status,
+          acceptedAt: body.data.status === "accepted" ? now : before.acceptedAt,
+          completedAt: body.data.status === "completed" ? now : before.completedAt,
+          cancelledAt: body.data.status === "cancelled" ? now : before.cancelledAt,
+        },
+      });
+
+      if (body.data.status === OrderStatus.cancelled) {
+        await tx.cryptoPayment.deleteMany({ where: { orderId: id } });
+      }
+
+      return tx.order.findUniqueOrThrow({
+        where: { id },
+        include: { items: true, cryptoPayment: true },
+      });
     });
     await audit(request, admin.id, "order.status_update", "Order", id, before, order);
 

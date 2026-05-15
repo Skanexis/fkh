@@ -68,6 +68,7 @@ export function Cart() {
   const [selectedPaymentCurrency, setSelectedPaymentCurrency] = useState(fallbackCryptoMethods[0].code);
   const [createdOrder, setCreatedOrder] = useState<ApiOrder | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [cancelingPayment, setCancelingPayment] = useState(false);
   const selectedShippingMethod = shippingMethods.find((method) => method.id === selectedShippingMethodId);
   const selectedCryptoMethod = cryptoMethods.find((method) => method.code === selectedPaymentCurrency) ?? cryptoMethods[0];
   const shippingAmount = selectedShippingMethod?.priceAmount ?? 0;
@@ -197,8 +198,26 @@ export function Cart() {
     }
   }
 
+  async function cancelCreatedPayment() {
+    if (!createdOrder || !canCancelPayment(createdOrder)) return;
+    if (!window.confirm(t("cart.cancelPaymentConfirm"))) return;
+    setCancelingPayment(true);
+    setCheckoutError(null);
+    try {
+      const updated = await apiRequest<ApiOrder>(`/api/v1/me/orders/${encodeURIComponent(createdOrder.publicId)}/cancel-payment`, {
+        method: "POST",
+      });
+      setCreatedOrder(updated);
+    } catch (err) {
+      setCheckoutError(err instanceof Error ? err.message : t("cart.cancelPaymentError"));
+    } finally {
+      setCancelingPayment(false);
+    }
+  }
+
   if (createdOrder) {
     const payment = createdOrder.payment;
+    const paymentCanBeCancelled = canCancelPayment(createdOrder);
     return (
       <div
         className="min-h-screen pb-24"
@@ -284,12 +303,44 @@ export function Cart() {
 
             <div
               className="mt-4 rounded-xl p-3"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
+              style={{
+                background: createdOrder.status === "cancelled" ? "rgba(239,68,68,0.1)" : "rgba(255,255,255,0.04)",
+                border: `1px solid ${createdOrder.status === "cancelled" ? "rgba(239,68,68,0.24)" : "rgba(255,255,255,0.06)"}`,
+              }}
             >
               <p style={{ color: "#E5E7EB", fontSize: 12, lineHeight: 1.5 }}>
-                {payment?.isUnderpaid ? t("cart.paymentUnderpaidNotice") : t("cart.paymentNotice")}
+                {createdOrder.status === "cancelled"
+                  ? t("cart.paymentCancelled")
+                  : payment?.isUnderpaid ? t("cart.paymentUnderpaidNotice") : t("cart.paymentNotice")}
               </p>
             </div>
+
+            {checkoutError && (
+              <div
+                className="mt-4 rounded-xl px-4 py-3 flex items-center gap-2"
+                style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)" }}
+              >
+                <AlertCircle size={16} color="#ef4444" />
+                <span style={{ color: "#ef4444", fontSize: 13 }}>{checkoutError}</span>
+              </div>
+            )}
+
+            {payment && createdOrder.status === "pending" && (
+              <button
+                onClick={cancelCreatedPayment}
+                disabled={!paymentCanBeCancelled || cancelingPayment}
+                className="mt-4 w-full py-3 rounded-xl flex items-center justify-center gap-2"
+                style={{
+                  background: paymentCanBeCancelled ? "rgba(239,68,68,0.12)" : "rgba(255,255,255,0.06)",
+                  border: `1px solid ${paymentCanBeCancelled ? "rgba(239,68,68,0.28)" : "rgba(255,255,255,0.08)"}`,
+                  color: paymentCanBeCancelled ? "#ef4444" : "#6B7280",
+                  fontWeight: 800,
+                }}
+              >
+                <Trash2 size={16} />
+                {cancelingPayment ? t("admin.saving") : paymentCanBeCancelled ? t("cart.cancelPayment") : t("cart.cancelPaymentUnavailable")}
+              </button>
+            )}
 
             <button
               onClick={() => navigate("/profile")}
@@ -977,6 +1028,14 @@ function formatPaymentStatus(status: string, t: (key: string) => string) {
     refunded: t("cart.paymentStatusFailed"),
   };
   return labels[normalized] ?? status;
+}
+
+function canCancelPayment(order: ApiOrder) {
+  const payment = order.payment;
+  if (!payment || order.status !== "pending") return false;
+  const actuallyPaid = payment.actuallyPaid ?? 0;
+  const pendingAmount = payment.pendingAmount ?? 0;
+  return actuallyPaid <= 0 && pendingAmount <= 0 && !["confirming", "partially_paid", "finished"].includes(payment.providerStatus);
 }
 
 function methodIsAvailable(method?: ApiCryptoPaymentMethod) {

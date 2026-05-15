@@ -86,7 +86,7 @@ export function AdminOrders() {
       return;
     }
     if (selectedOrder?.id === id) {
-      setSelectedOrder((prev) => prev ? { ...prev, status } : null);
+      setSelectedOrder(next);
     }
   }
 

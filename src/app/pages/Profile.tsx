@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { motion } from "motion/react";
-import { User, Package, Clock, CheckCircle, ChevronRight, Settings, LogOut, ShieldCheck, LayoutDashboard } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { User, Package, Clock, CheckCircle, ChevronRight, Settings, LogOut, ShieldCheck, LayoutDashboard, Coins, Copy, X, AlertCircle, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { TopBar } from "../components/TopBar";
 import { useAuth } from "../auth/auth-context";
@@ -34,30 +34,48 @@ export function Profile() {
   const { user, isAuthenticated, isAdmin, logout } = useAuth();
   const [orders, setOrders] = useState<ProfileOrder[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<ProfileOrder | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [cancelingPayment, setCancelingPayment] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadOrders() {
-      if (!isAuthenticated || user?.status !== "active") {
-        setOrders([]);
-        return;
-      }
-
-      setLoadingOrders(true);
-      try {
-        const apiOrders = await apiRequest<ApiOrder[]>("/api/v1/me/orders");
-        if (!cancelled) setOrders(apiOrders.map(toProfileOrder));
-      } finally {
-        if (!cancelled) setLoadingOrders(false);
-      }
+  async function loadOrders() {
+    if (!isAuthenticated || user?.status !== "active") {
+      setOrders([]);
+      return;
     }
 
+    setLoadingOrders(true);
+    try {
+      const apiOrders = await apiRequest<ApiOrder[]>("/api/v1/me/orders");
+      setOrders(apiOrders.map(toProfileOrder));
+    } finally {
+      setLoadingOrders(false);
+    }
+  }
+
+  useEffect(() => {
     void loadOrders();
+  }, [isAuthenticated, user?.status]);
+
+  useEffect(() => {
+    if (!selectedOrder) return;
+    let cancelled = false;
+    const timer = window.setInterval(() => {
+      apiRequest<ApiOrder>(`/api/v1/me/orders/${encodeURIComponent(selectedOrder.id)}`)
+        .then((apiOrder) => {
+          if (cancelled) return;
+          const next = toProfileOrder(apiOrder);
+          setSelectedOrder(next);
+          setOrders((current) => current.map((order) => (order.id === next.id ? next : order)));
+        })
+        .catch(() => undefined);
+    }, 10000);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
     };
-  }, [isAuthenticated, user?.status]);
+  }, [selectedOrder?.id]);
 
   const currentOrders = useMemo(
     () => orders.filter((o) => o.status !== "completed" && o.status !== "cancelled"),
@@ -69,6 +87,31 @@ export function Profile() {
   );
   const displayOrders = activeTab === "current" ? currentOrders : historyOrders;
   const isBanned = user?.status === "blocked" || user?.status === "deleted";
+
+  async function cancelPayment(order: ProfileOrder) {
+    if (!canCancelPayment(order)) return;
+    if (!window.confirm(t("cart.cancelPaymentConfirm"))) return;
+    setCancelingPayment(true);
+    setPaymentError(null);
+    try {
+      const updated = await apiRequest<ApiOrder>(`/api/v1/me/orders/${encodeURIComponent(order.id)}/cancel-payment`, {
+        method: "POST",
+      });
+      const next = toProfileOrder(updated);
+      setOrders((current) => current.map((item) => (item.id === next.id ? next : item)));
+      setSelectedOrder(next);
+    } catch (err) {
+      setPaymentError(err instanceof Error ? err.message : t("cart.cancelPaymentError"));
+    } finally {
+      setCancelingPayment(false);
+    }
+  }
+
+  async function copyPaymentValue(fieldId: string, value: string) {
+    await navigator.clipboard?.writeText(value);
+    setCopiedField(fieldId);
+    window.setTimeout(() => setCopiedField((current) => (current === fieldId ? null : current)), 1200);
+  }
 
   return (
     <div
@@ -255,6 +298,11 @@ export function Profile() {
                         style={{
                           background: "#1A1A1D",
                           border: "1px solid rgba(255,255,255,0.05)",
+                          cursor: "pointer",
+                        }}
+                        onClick={() => {
+                          setSelectedOrder(order);
+                          setPaymentError(null);
                         }}
                       >
                         <div className="flex items-center justify-between mb-3">
@@ -305,6 +353,16 @@ export function Profile() {
                             </span>
                           </div>
                         )}
+                        {order.payment && (
+                          <div
+                            className="mt-2 rounded-xl px-3 py-2"
+                            style={{ background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.2)" }}
+                          >
+                            <span style={{ color: "#60A5FA", fontSize: 12, fontWeight: 700 }}>
+                              {order.payment.currencyLabel} · {formatPaymentStatus(order.payment.providerStatus, t)}
+                            </span>
+                          </div>
+                        )}
                       </motion.div>
                     );
                   })}
@@ -315,10 +373,257 @@ export function Profile() {
           </>
         )}
       </div>
+
+      <AnimatePresence>
+        {selectedOrder && (
+          <PaymentModal
+            order={selectedOrder}
+            locale={locale}
+            copiedField={copiedField}
+            paymentError={paymentError}
+            cancelingPayment={cancelingPayment}
+            t={t}
+            onCopy={copyPaymentValue}
+            onCancelPayment={() => cancelPayment(selectedOrder)}
+            onClose={() => setSelectedOrder(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
 function formatCryptoAmount(amount: number) {
   return amount.toFixed(12).replace(/\.?0+$/, "");
+}
+
+function PaymentModal({
+  order,
+  locale,
+  copiedField,
+  paymentError,
+  cancelingPayment,
+  t,
+  onCopy,
+  onCancelPayment,
+  onClose,
+}: {
+  order: ProfileOrder;
+  locale: string;
+  copiedField: string | null;
+  paymentError: string | null;
+  cancelingPayment: boolean;
+  t: (key: string) => string;
+  onCopy: (fieldId: string, value: string) => void;
+  onCancelPayment: () => void;
+  onClose: () => void;
+}) {
+  const payment = order.payment;
+  const canCancel = canCancelPayment(order);
+  const status = STATUS_CONFIG[order.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.pending;
+  const StatusIcon = STATUS_ICON[order.status as keyof typeof STATUS_ICON] ?? Clock;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.72)", backdropFilter: "blur(8px)" }}
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 40 }}
+        className="w-full max-w-md max-h-[88vh] overflow-y-auto rounded-2xl"
+        style={{ background: "#1A1A1D", border: "1px solid rgba(255,77,109,0.18)" }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+          <div className="flex items-center gap-3">
+            <div className="rounded-full p-2.5" style={{ background: "rgba(255,77,109,0.12)" }}>
+              <Coins size={18} color="#FF4D6D" />
+            </div>
+            <div>
+              <h3 style={{ color: "#FFFFFF", fontWeight: 800, fontSize: 16 }}>{order.id}</h3>
+              <p style={{ color: "#A0A0A0", fontSize: 12 }}>{new Date(order.date).toLocaleString(locale)}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg" style={{ background: "rgba(255,255,255,0.07)" }}>
+            <X size={15} color="#A0A0A0" />
+          </button>
+        </div>
+
+        <div className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <span className="px-2.5 py-1 rounded-full flex items-center gap-1.5" style={{ background: status.bg }}>
+              <StatusIcon size={12} color={status.color} strokeWidth={2.5} />
+              <span style={{ color: status.color, fontSize: 11, fontWeight: 800 }}>{t(status.labelKey)}</span>
+            </span>
+            <span style={{ color: "#FF4D6D", fontWeight: 900, fontSize: 18 }}>{order.total}€</span>
+          </div>
+
+          {payment ? (
+            <>
+              <PaymentLine label={t("cart.paymentMethod")} value={`${payment.currencyLabel} · ${payment.network}`} />
+              <PaymentLine label={t("cart.paymentStatus")} value={formatPaymentStatus(payment.providerStatus, t)} />
+              {payment.expiresAt && <PaymentLine label={t("cart.paymentExpires")} value={new Date(payment.expiresAt).toLocaleString(locale)} />}
+              {payment.payAmount && (
+                <PaymentLine
+                  label={t("cart.paymentAmount")}
+                  value={`${formatCryptoAmount(payment.payAmount)} ${payment.providerCurrency.toUpperCase()}`}
+                  copyValue={String(payment.payAmount)}
+                  fieldId="amount"
+                  copiedField={copiedField}
+                  onCopy={onCopy}
+                />
+              )}
+              <PaymentLine
+                label={t("cart.paymentReceived")}
+                value={`${formatCryptoAmount(payment.actuallyPaid ?? 0)} ${payment.providerCurrency.toUpperCase()}`}
+              />
+              {(payment.pendingAmount ?? 0) > 0 && (
+                <PaymentLine
+                  label={t("cart.paymentPending")}
+                  value={`${formatCryptoAmount(payment.pendingAmount ?? 0)} ${payment.providerCurrency.toUpperCase()}`}
+                />
+              )}
+              {(payment.remainingAmount ?? 0) > 0 && (
+                <PaymentLine
+                  label={t("cart.paymentRemaining")}
+                  value={`${formatCryptoAmount(payment.remainingAmount ?? 0)} ${payment.providerCurrency.toUpperCase()}`}
+                  copyValue={String(payment.remainingAmount ?? 0)}
+                  fieldId="remaining"
+                  copiedField={copiedField}
+                  onCopy={onCopy}
+                  tone={payment.isUnderpaid ? "warning" : undefined}
+                />
+              )}
+              {payment.payAddress && (
+                <PaymentLine
+                  label={t("cart.paymentAddress")}
+                  value={payment.payAddress}
+                  copyValue={payment.payAddress}
+                  fieldId="address"
+                  copiedField={copiedField}
+                  onCopy={onCopy}
+                />
+              )}
+              {payment.payinExtraId && (
+                <PaymentLine
+                  label={t("cart.paymentMemo")}
+                  value={payment.payinExtraId}
+                  copyValue={payment.payinExtraId}
+                  fieldId="memo"
+                  copiedField={copiedField}
+                  onCopy={onCopy}
+                />
+              )}
+
+              <div className="mt-4 rounded-xl p-3" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                <p style={{ color: "#E5E7EB", fontSize: 12, lineHeight: 1.5 }}>
+                  {payment.isUnderpaid ? t("cart.paymentUnderpaidNotice") : t("cart.paymentNotice")}
+                </p>
+              </div>
+
+              {paymentError && (
+                <div className="mt-4 rounded-xl px-4 py-3 flex items-center gap-2" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)" }}>
+                  <AlertCircle size={16} color="#ef4444" />
+                  <span style={{ color: "#ef4444", fontSize: 13 }}>{paymentError}</span>
+                </div>
+              )}
+
+              {order.status === "pending" && (
+                <button
+                  onClick={onCancelPayment}
+                  disabled={!canCancel || cancelingPayment}
+                  className="mt-4 w-full py-3 rounded-xl flex items-center justify-center gap-2"
+                  style={{
+                    background: canCancel ? "rgba(239,68,68,0.12)" : "rgba(255,255,255,0.06)",
+                    border: `1px solid ${canCancel ? "rgba(239,68,68,0.28)" : "rgba(255,255,255,0.08)"}`,
+                    color: canCancel ? "#ef4444" : "#6B7280",
+                    fontWeight: 800,
+                  }}
+                >
+                  <Trash2 size={16} />
+                  {cancelingPayment ? t("admin.saving") : canCancel ? t("cart.cancelPayment") : t("cart.cancelPaymentUnavailable")}
+                </button>
+              )}
+            </>
+          ) : (
+            <div className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.04)" }}>
+              <p style={{ color: order.status === "cancelled" ? "#ef4444" : "#A0A0A0", fontSize: 13, fontWeight: 700 }}>
+                {order.status === "cancelled" ? t("cart.paymentCancelled") : t("profile.noOrders")}
+              </p>
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function PaymentLine({
+  label,
+  value,
+  copyValue,
+  fieldId,
+  copiedField,
+  onCopy,
+  tone,
+}: {
+  label: string;
+  value: string;
+  copyValue?: string;
+  fieldId?: string;
+  copiedField?: string | null;
+  onCopy?: (fieldId: string, value: string) => void;
+  tone?: "warning";
+}) {
+  const copied = fieldId && copiedField === fieldId;
+  return (
+    <div className="py-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+      <p style={{ color: "#A0A0A0", fontSize: 11, marginBottom: 4 }}>{label}</p>
+      <div className="flex items-center gap-2">
+        <p style={{ color: tone === "warning" ? "#f59e0b" : "#FFFFFF", fontSize: 14, fontWeight: 700, overflowWrap: "anywhere", flex: 1 }}>
+          {value}
+        </p>
+        {copyValue && fieldId && onCopy && (
+          <button
+            onClick={() => onCopy(fieldId, copyValue)}
+            className="px-2.5 py-1.5 rounded-lg flex items-center gap-1"
+            style={{ background: copied ? "rgba(34,197,94,0.14)" : "rgba(255,255,255,0.06)" }}
+          >
+            <Copy size={13} color={copied ? "#22c55e" : "#A0A0A0"} />
+            <span style={{ color: copied ? "#22c55e" : "#A0A0A0", fontSize: 11, fontWeight: 800 }}>
+              {copied ? "OK" : "Copy"}
+            </span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function formatPaymentStatus(status: string, t: (key: string) => string) {
+  const labels: Record<string, string> = {
+    waiting: t("cart.paymentStatusWaiting"),
+    confirming: t("cart.paymentStatusConfirming"),
+    confirmed: t("cart.paymentStatusConfirming"),
+    sending: t("cart.paymentStatusConfirming"),
+    finished: t("cart.paymentStatusFinished"),
+    partially_paid: t("cart.paymentStatusPartial"),
+    failed: t("cart.paymentStatusFailed"),
+    expired: t("cart.paymentStatusExpired"),
+  };
+  return labels[status] ?? status;
+}
+
+function canCancelPayment(order: ProfileOrder) {
+  const payment = order.payment;
+  if (!payment || order.status !== "pending") return false;
+  const actuallyPaid = payment.actuallyPaid ?? 0;
+  const pendingAmount = payment.pendingAmount ?? 0;
+  return actuallyPaid <= 0 && pendingAmount <= 0 && !["confirming", "partially_paid", "finished"].includes(payment.providerStatus);
 }
