@@ -379,15 +379,15 @@ export function AdminProducts() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4"
+            className="fkh-modal-overlay fixed inset-0 z-50 flex items-end md:items-center justify-center p-4"
             style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)" }}
           >
             <motion.div
               initial={{ opacity: 0, y: 50 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 50 }}
-              className="w-full max-w-lg rounded-2xl overflow-hidden"
-              style={{ background: "#111827", border: "1px solid rgba(59,130,246,0.2)", maxHeight: "85vh", overflowY: "auto" }}
+              className="fkh-modal-panel w-full max-w-lg rounded-2xl overflow-y-auto"
+              style={{ background: "#111827", border: "1px solid rgba(59,130,246,0.2)" }}
             >
               <div
                 className="flex items-center justify-between px-5 py-4"
@@ -733,14 +733,14 @@ export function AdminProducts() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            className="fkh-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4"
             style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)" }}
           >
             <motion.div
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0.9 }}
-              className="rounded-2xl p-6 w-full max-w-xs text-center"
+              className="fkh-modal-panel rounded-2xl p-6 w-full max-w-xs text-center overflow-y-auto"
               style={{ background: "#111827", border: "1px solid rgba(239,68,68,0.3)" }}
             >
               <div

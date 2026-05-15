@@ -336,25 +336,23 @@ export function AdminOrders() {
                       <DeliveryLine label="Payment ID" value={selectedOrder.payment.providerPaymentId} />
                       <DeliveryLine label="Paid at" value={selectedOrder.payment.paidAt ? new Date(selectedOrder.payment.paidAt).toLocaleString(locale) : undefined} />
                     </div>
-                    {selectedOrder.status === "pending" && (
-                      <button
-                        type="button"
-                        onClick={cancelSelectedPayment}
-                        disabled={!canCancelOrderPayment(selectedOrder) || paymentCanceling}
-                        className="mt-3 w-full flex items-center justify-center gap-2 rounded-xl py-3 transition-all"
-                        style={{
-                          background: canCancelOrderPayment(selectedOrder) ? "rgba(239,68,68,0.12)" : "rgba(255,255,255,0.06)",
-                          border: `1px solid ${canCancelOrderPayment(selectedOrder) ? "rgba(239,68,68,0.32)" : "rgba(255,255,255,0.08)"}`,
-                          color: canCancelOrderPayment(selectedOrder) ? "#ef4444" : "#6B7280",
-                          fontSize: 13,
-                          fontWeight: 800,
-                          opacity: paymentCanceling ? 0.75 : 1,
-                        }}
-                      >
-                        <Trash2 size={15} />
-                        {paymentCanceling ? t("admin.saving") : canCancelOrderPayment(selectedOrder) ? t("admin.cancelPayment") : t("admin.cancelPaymentUnavailable")}
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={cancelSelectedPayment}
+                      disabled={!canCancelOrderPayment(selectedOrder) || paymentCanceling}
+                      className="mt-3 w-full flex items-center justify-center gap-2 rounded-xl py-3 transition-all"
+                      style={{
+                        background: canCancelOrderPayment(selectedOrder) ? "rgba(239,68,68,0.12)" : "rgba(255,255,255,0.06)",
+                        border: `1px solid ${canCancelOrderPayment(selectedOrder) ? "rgba(239,68,68,0.32)" : "rgba(255,255,255,0.08)"}`,
+                        color: canCancelOrderPayment(selectedOrder) ? "#ef4444" : "#6B7280",
+                        fontSize: 13,
+                        fontWeight: 800,
+                        opacity: paymentCanceling ? 0.75 : 1,
+                      }}
+                    >
+                      <Trash2 size={15} />
+                      {paymentCanceling ? t("admin.saving") : canCancelOrderPayment(selectedOrder) ? t("admin.cancelPayment") : t("admin.cancelPaymentUnavailable")}
+                    </button>
                   </div>
                 )}
 

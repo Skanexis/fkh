@@ -219,6 +219,11 @@ body {
 
 .fkh-modal-overlay {
   z-index: 80;
+  align-items: flex-start !important;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-top: calc(16px + env(safe-area-inset-top, 0px)) !important;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
 }
 
 .fkh-app-frame .fkh-modal-overlay {
@@ -228,7 +233,14 @@ body {
 }
 
 .fkh-modal-panel {
-  max-height: min(88dvh, calc(var(--fkh-shell-height) - 32px));
+  max-height: calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  margin-top: auto;
+  margin-bottom: auto;
+  min-height: 0;
+}
+
+.fkh-app-frame .fkh-modal-panel {
+  max-height: calc(var(--fkh-shell-height) - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
 }
 
 .fkh-frame-corner {

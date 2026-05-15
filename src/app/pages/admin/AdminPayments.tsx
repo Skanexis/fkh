@@ -158,9 +158,30 @@ export function AdminPayments() {
                   </div>
                   <p style={{ color: "#9CA3AF", fontSize: 12 }}>{payment.order.customerName}</p>
                 </div>
-                <div className="text-right">
+                <div className="text-right flex-shrink-0">
                   <p style={{ color: "#FF4D6D", fontWeight: 800, fontSize: 15 }}>€{formatFiat(payment.priceAmount)}</p>
                   <p style={{ color: "#6B7280", fontSize: 11 }}>{new Date(payment.createdAt).toLocaleDateString(locale)}</p>
+                  {payment.order.status === "pending" && (
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void cancelPayment(payment);
+                      }}
+                      disabled={!canCancelAdminPayment(payment) || cancelingPaymentId === payment.id}
+                      className="mt-2 inline-flex items-center justify-center gap-1 rounded-lg px-2.5 py-1.5"
+                      style={{
+                        background: canCancelAdminPayment(payment) ? "rgba(239,68,68,0.12)" : "rgba(255,255,255,0.06)",
+                        border: `1px solid ${canCancelAdminPayment(payment) ? "rgba(239,68,68,0.3)" : "rgba(255,255,255,0.08)"}`,
+                        color: canCancelAdminPayment(payment) ? "#ef4444" : "#6B7280",
+                        fontSize: 11,
+                        fontWeight: 800,
+                      }}
+                    >
+                      <Trash2 size={12} />
+                      {cancelingPaymentId === payment.id ? t("admin.saving") : t("admin.cancelPayment")}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -288,25 +309,23 @@ function PaymentModal({
             </div>
           </div>
 
-          {payment.order.status === "pending" && (
-            <button
-              type="button"
-              onClick={onCancel}
-              disabled={!canCancel || canceling}
-              className="mt-4 w-full flex items-center justify-center gap-2 rounded-xl py-3 transition-all"
-              style={{
-                background: canCancel ? "rgba(239,68,68,0.12)" : "rgba(255,255,255,0.06)",
-                border: `1px solid ${canCancel ? "rgba(239,68,68,0.32)" : "rgba(255,255,255,0.08)"}`,
-                color: canCancel ? "#ef4444" : "#6B7280",
-                fontSize: 13,
-                fontWeight: 800,
-                opacity: canceling ? 0.75 : 1,
-              }}
-            >
-              <Trash2 size={15} />
-              {canceling ? t("admin.saving") : canCancel ? t("admin.cancelPayment") : t("admin.cancelPaymentUnavailable")}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={!canCancel || canceling}
+            className="mt-4 w-full flex items-center justify-center gap-2 rounded-xl py-3 transition-all"
+            style={{
+              background: canCancel ? "rgba(239,68,68,0.12)" : "rgba(255,255,255,0.06)",
+              border: `1px solid ${canCancel ? "rgba(239,68,68,0.32)" : "rgba(255,255,255,0.08)"}`,
+              color: canCancel ? "#ef4444" : "#6B7280",
+              fontSize: 13,
+              fontWeight: 800,
+              opacity: canceling ? 0.75 : 1,
+            }}
+          >
+            <Trash2 size={15} />
+            {canceling ? t("admin.saving") : canCancel ? t("admin.cancelPayment") : t("admin.cancelPaymentUnavailable")}
+          </button>
         </div>
       </motion.div>
     </motion.div>

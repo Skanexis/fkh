@@ -220,7 +220,7 @@ export function AdminUsers() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4"
+            className="fkh-modal-overlay fixed inset-0 z-50 flex items-end md:items-center justify-center p-4"
             style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)" }}
             onClick={() => setSelectedUser(null)}
           >
@@ -228,7 +228,7 @@ export function AdminUsers() {
               initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 40 }}
-              className="w-full max-w-sm rounded-2xl"
+              className="fkh-modal-panel w-full max-w-sm rounded-2xl overflow-y-auto"
               style={{ background: "#111827", border: "1px solid rgba(59,130,246,0.2)" }}
               onClick={(e) => e.stopPropagation()}
             >
