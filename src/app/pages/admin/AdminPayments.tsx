@@ -6,7 +6,7 @@ import { ApiAdminPayment } from "../../api/types";
 import { useI18n } from "../../i18n";
 import { useBodyScrollLock } from "../../components/useBodyScrollLock";
 
-type PaymentStatus = "waiting" | "confirming" | "partially_paid" | "finished" | "expired" | "failed";
+type PaymentStatus = "waiting" | "confirming" | "partially_paid" | "finished" | "expired" | "failed" | "manual_pending" | "manual_accepted";
 
 const STATUS_CONFIG: Record<string, { labelKey: string; color: string; bg: string; icon: typeof Clock }> = {
   waiting: { labelKey: "cart.paymentStatusWaiting", color: "#F59E0B", bg: "rgba(245,158,11,0.12)", icon: Clock },
@@ -15,6 +15,8 @@ const STATUS_CONFIG: Record<string, { labelKey: string; color: string; bg: strin
   finished: { labelKey: "cart.paymentStatusFinished", color: "#22c55e", bg: "rgba(34,197,94,0.12)", icon: CheckCircle },
   expired: { labelKey: "cart.paymentStatusExpired", color: "#6B7280", bg: "rgba(107,114,128,0.12)", icon: AlertTriangle },
   failed: { labelKey: "cart.paymentStatusFailed", color: "#ef4444", bg: "rgba(239,68,68,0.12)", icon: AlertTriangle },
+  manual_pending: { labelKey: "cart.paymentStatusManualPending", color: "#3B82F6", bg: "rgba(59,130,246,0.12)", icon: Clock },
+  manual_accepted: { labelKey: "cart.paymentStatusManualAccepted", color: "#22c55e", bg: "rgba(34,197,94,0.12)", icon: CheckCircle },
 };
 
 export function AdminPayments() {
@@ -118,7 +120,7 @@ export function AdminPayments() {
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-2 mb-3">
-        {(["all", "waiting", "confirming", "partially_paid", "finished", "expired"] as const).map((status) => (
+        {(["all", "waiting", "confirming", "partially_paid", "finished", "expired", "manual_pending", "manual_accepted"] as const).map((status) => (
           <button
             key={status}
             onClick={() => setFilterStatus(status)}
@@ -404,5 +406,5 @@ function formatFiat(value: number) {
 function canCancelAdminPayment(payment: ApiAdminPayment) {
   const actuallyPaid = payment.actuallyPaid ?? 0;
   const pendingAmount = payment.pendingAmount ?? 0;
-  return actuallyPaid <= 0 && pendingAmount <= 0 && payment.providerStatus !== "finished";
+  return actuallyPaid <= 0 && pendingAmount <= 0 && !["finished", "manual_accepted"].includes(payment.providerStatus);
 }

@@ -544,12 +544,15 @@ function paymentStatusLabel(status: string, t: (key: string) => string) {
     finished: t("cart.paymentStatusFinished"),
     expired: t("cart.paymentStatusExpired"),
     failed: t("cart.paymentStatusFailed"),
+    manual_pending: t("cart.paymentStatusManualPending"),
+    manual_accepted: t("cart.paymentStatusManualAccepted"),
   };
   return labels[status] ?? status;
 }
 
 function paymentStatusColor(status: string) {
   if (status === "finished") return "#22c55e";
+  if (status === "manual_pending" || status === "manual_accepted") return "#3B82F6";
   if (status === "partially_paid") return "#F97316";
   if (status === "expired") return "#6B7280";
   if (status === "failed") return "#ef4444";
@@ -558,6 +561,7 @@ function paymentStatusColor(status: string) {
 
 function paymentStatusBg(status: string) {
   if (status === "finished") return "rgba(34,197,94,0.12)";
+  if (status === "manual_pending" || status === "manual_accepted") return "rgba(59,130,246,0.12)";
   if (status === "partially_paid") return "rgba(249,115,22,0.12)";
   if (status === "expired") return "rgba(107,114,128,0.12)";
   if (status === "failed") return "rgba(239,68,68,0.12)";
@@ -569,7 +573,7 @@ function canCancelOrderPayment(order: AdminOrder) {
   if (!payment) return false;
   const actuallyPaid = payment.actuallyPaid ?? 0;
   const pendingAmount = payment.pendingAmount ?? 0;
-  return actuallyPaid <= 0 && pendingAmount <= 0 && payment.providerStatus !== "finished";
+  return actuallyPaid <= 0 && pendingAmount <= 0 && !["finished", "manual_accepted"].includes(payment.providerStatus);
 }
 
 function formatCrypto(value?: number | null) {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { AlertCircle, ShoppingCart, Trash2, Minus, Plus, ArrowRight, Package, Coins, Copy, CheckCircle, Wallet, Search, MapPin, Loader2, LocateFixed } from "lucide-react";
+import { AlertCircle, ShoppingCart, Trash2, Minus, Plus, ArrowRight, Package, Coins, Copy, CheckCircle, Wallet, Search, MapPin, Loader2, LocateFixed, CreditCard } from "lucide-react";
 import { useCart, type CartItem } from "../store/cart-context";
 import { TopBar } from "../components/TopBar";
 import { useNavigate } from "react-router";
@@ -54,6 +54,16 @@ const fallbackCryptoMethods: ApiCryptoPaymentMethod[] = [
   { code: "usdc_erc20", label: "USDC (ETH)", network: "Ethereum ERC-20", available: false, configured: false, totalSlots: 0, freeSlots: 0 },
 ];
 
+type PaymentOption = ApiCryptoPaymentMethod & {
+  type: "crypto" | "manual";
+  surchargePercent?: number;
+};
+
+const manualPaymentMethods: PaymentOption[] = [
+  { type: "manual", code: "ccpp", label: "CCPP", network: "Manual payment", available: true, configured: true },
+  { type: "manual", code: "bonifico", label: "Bonifico", network: "+10%", available: true, configured: true, surchargePercent: 10 },
+];
+
 export function Cart() {
   const { items, removeItem, updateQuantity, total, clearCart } = useCart();
   const navigate = useNavigate();
@@ -76,10 +86,17 @@ export function Cart() {
   const [addressSearching, setAddressSearching] = useState(false);
   const [addressLocating, setAddressLocating] = useState(false);
   const [addressSearchError, setAddressSearchError] = useState<string | null>(null);
+  const [addressSelected, setAddressSelected] = useState(false);
   const selectedShippingMethod = shippingMethods.find((method) => method.id === selectedShippingMethodId);
-  const selectedCryptoMethod = cryptoMethods.find((method) => method.code === selectedPaymentCurrency) ?? cryptoMethods[0];
   const shippingAmount = selectedShippingMethod?.priceAmount ?? 0;
-  const orderTotal = total + shippingAmount;
+  const paymentOptions: PaymentOption[] = [
+    ...cryptoMethods.map((method) => ({ ...method, type: "crypto" as const })),
+    ...manualPaymentMethods,
+  ];
+  const selectedPaymentMethod = paymentOptions.find((method) => method.code === selectedPaymentCurrency) ?? paymentOptions[0];
+  const selectedCryptoMethod = selectedPaymentMethod?.type === "crypto" ? selectedPaymentMethod : cryptoMethods[0];
+  const manualPaymentFee = selectedPaymentMethod?.surchargePercent ? (total + shippingAmount) * (selectedPaymentMethod.surchargePercent / 100) : 0;
+  const orderTotal = roundMoney(total + shippingAmount + manualPaymentFee);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,7 +116,7 @@ export function Cart() {
 
   useEffect(() => {
     const query = addressQuery.trim();
-    if (!showShippingForm || query.length < 3) {
+    if (!showShippingForm || addressSelected || query.length < 3) {
       setAddressResults([]);
       setAddressSearching(false);
       setAddressSearchError(null);
@@ -129,7 +146,7 @@ export function Cart() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [addressQuery, showShippingForm, t]);
+  }, [addressQuery, addressSelected, showShippingForm, t]);
 
   useEffect(() => {
     if (!createdOrder) return;
@@ -158,6 +175,7 @@ export function Cart() {
       if (cancelled || methods.length === 0) return;
       setCryptoMethods(methods);
       setSelectedPaymentCurrency((current) => {
+        if (manualPaymentMethods.some((method) => method.code === current)) return current;
         const currentMethod = methods.find((method) => method.code === current);
         if (methodIsAvailable(currentMethod)) return current;
         return methods.find(methodIsAvailable)?.code ?? methods[0].code;
@@ -210,7 +228,7 @@ export function Cart() {
       return;
     }
 
-    if (!methodIsAvailable(selectedCryptoMethod)) {
+    if (!methodIsAvailable(selectedPaymentMethod)) {
       setCheckoutError(t("cart.paymentMethodBusyError"));
       document.querySelector(`[data-shipping-field="paymentMethod"]`)?.scrollIntoView({
         behavior: "smooth",
@@ -261,13 +279,14 @@ export function Cart() {
 
   if (createdOrder) {
     const payment = createdOrder.payment;
+    const isManualPayment = payment?.provider === "manual";
     const paymentCanBeCancelled = canCancelPayment(createdOrder);
     return (
       <div
         className="min-h-screen pb-24"
         style={{ background: "#0B0B0C", fontFamily: "Inter, sans-serif" }}
       >
-        <TopBar title={t("cart.paymentTitle")} showBack />
+        <TopBar title={isManualPayment ? t("cart.manualPaymentTitle") : t("cart.paymentTitle")} showBack />
         <div className="pt-20 px-4">
           <motion.div
             initial={{ opacity: 0, y: 18 }}
@@ -281,11 +300,13 @@ export function Cart() {
               </div>
               <div>
                 <h1 style={{ color: "#FFFFFF", fontSize: 20, fontWeight: 800 }}>{createdOrder.publicId}</h1>
-                <p style={{ color: "#A0A0A0", fontSize: 12, marginTop: 2 }}>{t("cart.paymentWaiting")}</p>
+                <p style={{ color: "#A0A0A0", fontSize: 12, marginTop: 2 }}>
+                  {isManualPayment ? t("cart.manualPaymentWaiting") : t("cart.paymentWaiting")}
+                </p>
               </div>
             </div>
 
-            <PaymentLine label={t("cart.paymentMethod")} value={payment ? `${payment.currencyLabel} · ${payment.network}` : selectedCryptoMethod.label} />
+            <PaymentLine label={t("cart.paymentMethod")} value={payment ? (isManualPayment ? payment.currencyLabel : `${payment.currencyLabel} · ${payment.network}`) : selectedPaymentMethod.label} />
             <PaymentLine label={t("cart.paymentStatus")} value={payment ? formatPaymentStatus(payment.providerStatus, t) : t("cart.paymentStatusWaiting")} />
             <PaymentLine label={t("cart.paymentFiat")} value={`${createdOrder.totalAmount} ${createdOrder.currency}`} />
             {payment?.expiresAt && (
@@ -355,7 +376,7 @@ export function Cart() {
               <p style={{ color: "#E5E7EB", fontSize: 12, lineHeight: 1.5 }}>
                 {createdOrder.status === "cancelled"
                   ? t("cart.paymentCancelled")
-                  : payment?.isUnderpaid ? t("cart.paymentUnderpaidNotice") : t("cart.paymentNotice")}
+                  : isManualPayment ? t("cart.manualPaymentNotice") : payment?.isUnderpaid ? t("cart.paymentUnderpaidNotice") : t("cart.paymentNotice")}
               </p>
             </div>
 
@@ -580,6 +601,7 @@ export function Cart() {
                 results={addressResults}
                 searching={addressSearching}
                 error={addressSearchError}
+                suppressFallback={addressSelected}
                 locating={addressLocating}
                 label={t("cart.addressLine1")}
                 required
@@ -589,12 +611,14 @@ export function Cart() {
                 onChange={(value) => {
                   updateShipping("addressLine1", value);
                   setAddressQuery(value);
+                  setAddressSelected(false);
                   setAddressSearchError(null);
                 }}
                 onSelect={selectAddressSuggestion}
                 onUseLocation={useCurrentLocationAddress}
                 onManual={() => {
                   setAddressResults([]);
+                  setAddressSelected(true);
                   setAddressSearchError(null);
                 }}
               />
@@ -651,10 +675,10 @@ export function Cart() {
               <div data-shipping-field="paymentMethod">
                 <div className="flex items-center justify-between gap-3">
                   <span style={{ color: "#A0A0A0", fontSize: 12, fontWeight: 600 }}>{t("cart.paymentMethod")} *</span>
-                  <span style={{ color: "#6B7280", fontSize: 11 }}>{t("cart.walletAvailability")}</span>
+                  <span style={{ color: "#6B7280", fontSize: 11 }}>{t("cart.paymentOptions")}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 mt-2">
-                  {cryptoMethods.map((method) => (
+                  {paymentOptions.map((method) => (
                     <PaymentMethodCard
                       key={method.code}
                       method={method}
@@ -722,6 +746,12 @@ export function Cart() {
               {selectedShippingMethod ? `${selectedShippingMethod.label} · ${formatPrice(shippingAmount, t)}` : t("cart.selectCourier")}
             </span>
           </div>
+          {manualPaymentFee > 0 && (
+            <div className="flex justify-between items-center mb-2">
+              <span style={{ color: "#A0A0A0", fontSize: 14 }}>{t("cart.bonificoFee")}</span>
+              <span style={{ color: "#FFFFFF", fontWeight: 600, fontSize: 14 }}>{formatPrice(roundMoney(manualPaymentFee), t)}</span>
+            </div>
+          )}
           <div className="mt-3 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
             <div className="flex justify-between items-center">
               <span style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 16 }}>{t("product.total")}</span>
@@ -785,10 +815,11 @@ export function Cart() {
     setCheckoutError(null);
   }
 
-  function applyAddressSuggestion(suggestion: ApiAddressSuggestion) {
+  function applyAddressSuggestion(suggestion: ApiAddressSuggestion, sourceQuery = addressQuery) {
+    const addressLine1 = withHouseNumberFromQuery(suggestion.addressLine1 || suggestion.displayName, sourceQuery);
     setShippingForm((current) => ({
       ...current,
-      addressLine1: suggestion.addressLine1 || current.addressLine1,
+      addressLine1: addressLine1 || current.addressLine1,
       city: suggestion.city || current.city,
       region: suggestion.region || current.region,
       postalCode: suggestion.postalCode || current.postalCode,
@@ -803,15 +834,17 @@ export function Cart() {
       postalCode: undefined,
       country: undefined,
     }));
-    setAddressQuery(suggestion.addressLine1 || suggestion.displayName);
+    setAddressSelected(true);
+    setAddressQuery(addressLine1 || suggestion.addressLine1 || suggestion.displayName);
     setAddressResults([]);
     setAddressSearchError(null);
     setCheckoutError(null);
   }
 
   async function selectAddressSuggestion(suggestion: ApiAddressSuggestion) {
+    const sourceQuery = addressQuery;
     if (suggestion.postalCode || suggestion.latitude === null || suggestion.latitude === undefined || suggestion.longitude === null || suggestion.longitude === undefined) {
-      applyAddressSuggestion(suggestion);
+      applyAddressSuggestion(suggestion, sourceQuery);
       return;
     }
 
@@ -825,9 +858,9 @@ export function Cart() {
         ...detailed,
         displayName: suggestion.displayName,
         addressLine1: detailed.addressLine1 || suggestion.addressLine1,
-      });
+      }, sourceQuery);
     } catch {
-      applyAddressSuggestion(suggestion);
+      applyAddressSuggestion(suggestion, sourceQuery);
     } finally {
       setAddressSearching(false);
     }
@@ -852,7 +885,7 @@ export function Cart() {
       const suggestion = await apiRequest<ApiAddressSuggestion>(
         `/api/v1/address/reverse?lat=${encodeURIComponent(position.coords.latitude)}&lon=${encodeURIComponent(position.coords.longitude)}`,
       );
-      applyAddressSuggestion(suggestion);
+      applyAddressSuggestion(suggestion, "");
     } catch (err) {
       setAddressSearchError(err instanceof Error ? err.message : t("cart.geolocationError"));
     } finally {
@@ -961,6 +994,33 @@ function FieldError({ message }: { message: string }) {
   return <p style={{ color: "#ef4444", fontSize: 11, lineHeight: 1.35, marginTop: 5 }}>{message}</p>;
 }
 
+function withHouseNumberFromQuery(addressLine1: string, query: string) {
+  const base = addressLine1.trim().replace(/\s+/g, " ");
+  const houseNumber = extractHouseNumberFromQuery(query, base);
+  if (!base || !houseNumber || /\d/.test(base)) return base;
+  return `${base} ${houseNumber}`;
+}
+
+function extractHouseNumberFromQuery(query: string, baseAddress: string) {
+  const normalizedQuery = normalizeAddressSearchText(query);
+  const normalizedBase = normalizeAddressSearchText(baseAddress);
+  if (!normalizedQuery || !normalizedBase || !normalizedQuery.includes(normalizedBase)) return "";
+
+  const match = query.trim().match(/(?:^|[\s,])(\d+[a-zA-Z]?(?:[/-]\d+[a-zA-Z]?)?)\s*$/);
+  const houseNumber = match?.[1] ?? "";
+  return houseNumber.length <= 8 ? houseNumber : "";
+}
+
+function normalizeAddressSearchText(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
 function AddressAutocompleteInput({
   value,
   query,
@@ -968,6 +1028,7 @@ function AddressAutocompleteInput({
   searching,
   locating,
   error,
+  suppressFallback,
   label,
   required,
   field,
@@ -984,6 +1045,7 @@ function AddressAutocompleteInput({
   searching: boolean;
   locating: boolean;
   error: string | null;
+  suppressFallback: boolean;
   label: string;
   required?: boolean;
   field: keyof ShippingForm;
@@ -994,7 +1056,7 @@ function AddressAutocompleteInput({
   onManual: () => void;
   t: (key: string, values?: Record<string, string | number>) => string;
 }) {
-  const showManualFallback = query.trim().length >= 3 && !searching && !error && results.length === 0;
+  const showManualFallback = query.trim().length >= 3 && !suppressFallback && !searching && !error && results.length === 0;
   return (
     <div data-shipping-field={field}>
       <div className="flex items-center justify-between gap-3">
@@ -1096,17 +1158,19 @@ function PaymentMethodCard({
   onSelect,
   t,
 }: {
-  method: ApiCryptoPaymentMethod;
+  method: PaymentOption;
   active: boolean;
   onSelect: () => void;
   t: (key: string, values?: Record<string, string | number>) => string;
 }) {
   const available = methodIsAvailable(method);
   const configured = method.configured !== false;
-  const statusColor = available ? "#22c55e" : configured ? "#f59e0b" : "#ef4444";
-  const statusLabel = available ? t("cart.walletAvailable") : configured ? t("cart.walletBusy") : t("cart.walletNotConfigured");
+  const isManual = method.type === "manual";
+  const statusColor = isManual ? "#3B82F6" : available ? "#22c55e" : configured ? "#f59e0b" : "#ef4444";
+  const statusLabel = isManual ? t("cart.manualPayment") : available ? t("cart.walletAvailable") : configured ? t("cart.walletBusy") : t("cart.walletNotConfigured");
   const freeSlots = method.freeSlots ?? (available ? 1 : 0);
   const totalSlots = method.totalSlots ?? 1;
+  const Icon = isManual ? CreditCard : Wallet;
 
   return (
     <button
@@ -1133,14 +1197,14 @@ function PaymentMethodCard({
               border: "1px solid rgba(255,255,255,0.07)",
             }}
           >
-            <Wallet size={16} color={active ? "#FF4D6D" : "#A0A0A0"} />
+            <Icon size={16} color={active ? "#FF4D6D" : "#A0A0A0"} />
           </span>
           <div className="min-w-0">
             <p className="truncate" style={{ color: active ? "#FF4D6D" : "#FFFFFF", fontSize: 13, fontWeight: 800 }}>
               {method.label}
             </p>
             <p className="truncate" style={{ color: "#A0A0A0", fontSize: 10, marginTop: 1 }}>
-              {method.network}
+              {isManual ? (method.surchargePercent ? t("cart.bonificoFee") : t("cart.manualPayment")) : method.network}
             </p>
           </div>
       </div>
@@ -1162,12 +1226,20 @@ function PaymentMethodCard({
         >
           {statusLabel}
         </span>
-        <span style={{ color: available ? "#E5E7EB" : "#A0A0A0", fontSize: 11, fontWeight: 800 }}>
-          {freeSlots}/{totalSlots}
-        </span>
+        {!isManual && (
+          <span style={{ color: available ? "#E5E7EB" : "#A0A0A0", fontSize: 11, fontWeight: 800 }}>
+            {freeSlots}/{totalSlots}
+          </span>
+        )}
       </div>
 
-      {active && method.wallets && method.wallets.length > 0 && (
+      {isManual && method.surchargePercent ? (
+        <p className="mt-2" style={{ color: "#f59e0b", fontSize: 10, fontWeight: 800 }}>
+          {t("cart.manualSurcharge", { percent: method.surchargePercent })}
+        </p>
+      ) : null}
+
+      {active && !isManual && method.wallets && method.wallets.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {method.wallets.slice(0, 2).map((wallet) => {
             const walletFree = wallet.status === "available";
@@ -1288,7 +1360,13 @@ function toShippingPayload(form: ShippingForm, shippingMethod?: ApiShippingMetho
 }
 
 function formatPrice(amount: number, t: (key: string) => string) {
-  return amount > 0 ? `${amount}€` : t("cart.free");
+  if (amount <= 0) return t("cart.free");
+  const rounded = roundMoney(amount);
+  return `${rounded % 1 === 0 ? rounded : rounded.toFixed(2)}€`;
+}
+
+function roundMoney(amount: number) {
+  return Math.round((amount + Number.EPSILON) * 100) / 100;
 }
 
 function formatCryptoAmount(amount: number) {
@@ -1307,6 +1385,8 @@ function formatPaymentStatus(status: string, t: (key: string) => string) {
     failed: t("cart.paymentStatusFailed"),
     expired: t("cart.paymentStatusExpired"),
     refunded: t("cart.paymentStatusFailed"),
+    manual_pending: t("cart.paymentStatusManualPending"),
+    manual_accepted: t("cart.paymentStatusManualAccepted"),
   };
   return labels[normalized] ?? status;
 }
@@ -1316,7 +1396,7 @@ function canCancelPayment(order: ApiOrder) {
   if (!payment || order.status !== "pending") return false;
   const actuallyPaid = payment.actuallyPaid ?? 0;
   const pendingAmount = payment.pendingAmount ?? 0;
-  return actuallyPaid <= 0 && pendingAmount <= 0 && payment.providerStatus !== "finished";
+  return actuallyPaid <= 0 && pendingAmount <= 0 && !["finished", "manual_accepted"].includes(payment.providerStatus);
 }
 
 function methodIsAvailable(method?: ApiCryptoPaymentMethod) {

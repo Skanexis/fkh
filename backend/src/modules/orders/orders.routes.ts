@@ -20,11 +20,19 @@ const optionalText = (max: number) => z.preprocess(emptyToUndefined, z.string().
 const optionalEmail = z.preprocess(emptyToUndefined, z.string().trim().email().optional());
 const optionalPhone = z.preprocess(emptyToUndefined, z.string().trim().min(5).max(40).optional());
 
+const manualPaymentCodes = ["ccpp", "bonifico"] as const;
+type ManualPaymentCode = typeof manualPaymentCodes[number];
+type OrderPaymentCode = CryptoPaymentCode | ManualPaymentCode;
+const orderPaymentCodes = [
+  ...CRYPTO_PAYMENT_METHODS.map((method) => method.code),
+  ...manualPaymentCodes,
+] as unknown as [OrderPaymentCode, ...OrderPaymentCode[]];
+
 const createOrderBody = z.object({
   customerComment: optionalText(1000),
   customerEmail: optionalEmail,
   customerPhone: optionalPhone,
-  paymentCurrency: z.enum(CRYPTO_PAYMENT_METHODS.map((method) => method.code) as [CryptoPaymentCode, ...CryptoPaymentCode[]]).default("btc"),
+  paymentCurrency: z.enum(orderPaymentCodes).default("btc"),
   shipping: z.object({
     methodId: z.string().uuid(),
     fullName: requiredText(2, 120),
@@ -108,9 +116,10 @@ export async function registerOrderRoutes(app: FastifyInstance) {
 
     const subtotal = orderItems.reduce((sum, item) => sum + item.lineTotal, 0);
     const shippingAmount = effectiveShippingPrice(shippingMethod);
-    const total = subtotal + shippingAmount;
-    const paymentMethod = getCryptoPaymentMethod(body.data.paymentCurrency);
-    if (!paymentMethod) throw badRequest("Unsupported crypto payment currency");
+    const baseTotal = subtotal + shippingAmount;
+    const paymentMethod = getOrderPaymentMethod(body.data.paymentCurrency);
+    if (!paymentMethod) throw badRequest("Unsupported payment method");
+    const total = paymentMethod.code === "bonifico" ? money(baseTotal * 1.1) : baseTotal;
     const order = await prisma.$transaction(async (tx) => {
       const publicId = await createPublicOrderId(tx);
       return tx.order.create({
@@ -149,8 +158,18 @@ export async function registerOrderRoutes(app: FastifyInstance) {
               currencyLabel: paymentMethod.label,
               providerCurrency: paymentMethod.providerCurrency,
               network: paymentMethod.network,
+              provider: paymentMethod.manual ? "manual" : "self_custody",
+              providerPaymentId: paymentMethod.manual ? `manual:${publicId}` : undefined,
+              providerStatus: paymentMethod.manual ? "manual_pending" : "created",
               priceAmount: total,
               priceCurrency: "EUR",
+              rawProviderPayload: paymentMethod.manual
+                ? {
+                    manualPayment: true,
+                    surchargePercent: paymentMethod.code === "bonifico" ? 10 : 0,
+                    baseTotal,
+                  }
+                : undefined,
             },
           },
         },
@@ -158,23 +177,25 @@ export async function registerOrderRoutes(app: FastifyInstance) {
       });
     });
 
-    try {
-      await createCryptoPayment({
-        orderId: order.id,
-        publicId: order.publicId,
-        amount: total,
-        currency: order.currency,
-        paymentCode: body.data.paymentCurrency,
-      });
-    } catch (error) {
-      await prisma.cryptoPayment.update({
-        where: { orderId: order.id },
-        data: {
-          providerStatus: "creation_failed",
-          rawProviderPayload: { error: error instanceof Error ? error.message : "Payment creation failed" },
-        },
-      });
-      throw error;
+    if (!paymentMethod.manual) {
+      try {
+        await createCryptoPayment({
+          orderId: order.id,
+          publicId: order.publicId,
+          amount: total,
+          currency: order.currency,
+          paymentCode: body.data.paymentCurrency as CryptoPaymentCode,
+        });
+      } catch (error) {
+        await prisma.cryptoPayment.update({
+          where: { orderId: order.id },
+          data: {
+            providerStatus: "creation_failed",
+            rawProviderPayload: { error: error instanceof Error ? error.message : "Payment creation failed" },
+          },
+        });
+        throw error;
+      }
     }
 
     const orderWithPayment = await prisma.order.findUniqueOrThrow({
@@ -182,10 +203,36 @@ export async function registerOrderRoutes(app: FastifyInstance) {
       include: { items: true, cryptoPayment: true },
     });
 
-    await notifyNewOrder(orderWithPayment);
+    if (paymentMethod.manual) {
+      await notifyManualOrder(orderWithPayment);
+    }
 
     return { data: serializeOrder(orderWithPayment) };
   });
+}
+
+function getOrderPaymentMethod(code: OrderPaymentCode) {
+  const cryptoMethod = getCryptoPaymentMethod(code);
+  if (cryptoMethod) return { ...cryptoMethod, manual: false };
+  if (code === "ccpp") {
+    return {
+      code,
+      label: "CCPP",
+      providerCurrency: "eur",
+      network: "Manual payment",
+      manual: true,
+    };
+  }
+  if (code === "bonifico") {
+    return {
+      code,
+      label: "Bonifico +10%",
+      providerCurrency: "eur",
+      network: "Manual payment",
+      manual: true,
+    };
+  }
+  return null;
 }
 
 function cleanOptional(value?: string | null) {
@@ -247,12 +294,12 @@ async function createPublicOrderId(tx: any) {
   throw badRequest("Could not allocate order number");
 }
 
-async function notifyNewOrder(order: any) {
+async function notifyManualOrder(order: any) {
   if (!env.ORDER_NOTIFICATIONS_ENABLED || !env.TELEGRAM_ADMIN_CHAT_ID) return;
   await sendTelegramJson("sendMessage", {
     chat_id: env.TELEGRAM_ADMIN_CHAT_ID,
     parse_mode: "HTML",
-    text: formatAdminOrderMessage(order),
+    text: formatManualOrderMessage(order),
     reply_markup: {
       inline_keyboard: [
         [
@@ -264,7 +311,8 @@ async function notifyNewOrder(order: any) {
   });
 }
 
-function formatAdminOrderMessage(order: any) {
+function formatManualOrderMessage(order: any) {
+  const payment = order.cryptoPayment;
   const telegram = order.telegramUsernameSnapshot
     ? `@${order.telegramUsernameSnapshot}`
     : `ID ${order.telegramIdSnapshot}`;
@@ -282,10 +330,13 @@ function formatAdminOrderMessage(order: any) {
     [order.shippingPostalCode, order.shippingCity, order.shippingRegion].filter(Boolean).join(" "),
     order.shippingCountry,
   ].filter(Boolean).join("\n");
+  const raw = typeof payment?.rawProviderPayload === "object" && payment.rawProviderPayload ? payment.rawProviderPayload : null;
+  const surchargePercent = raw && "surchargePercent" in raw ? Number((raw as any).surchargePercent) : 0;
 
   return [
-    `🆕 <b>New order ${escapeHtml(order.publicId)}</b>`,
+    `🆕 <b>Manual order ${escapeHtml(order.publicId)}</b>`,
     "",
+    `<b>Status:</b> Waiting manual acceptance`,
     `<b>Customer:</b> ${escapeHtml(order.customerName)}`,
     `<b>Telegram:</b> ${escapeHtml(telegram)}`,
     `<b>Phone:</b> ${escapeHtml(order.shippingPhone ?? order.customerPhone ?? "-")}`,
@@ -295,12 +346,8 @@ function formatAdminOrderMessage(order: any) {
     items,
     "",
     `<b>Total:</b> ${money(order.totalAmount)} ${order.currency}`,
-    order.cryptoPayment
-      ? `<b>Payment:</b> ${escapeHtml(order.cryptoPayment.currencyLabel)} (${escapeHtml(order.cryptoPayment.network)})`
-      : null,
-    order.cryptoPayment?.payAmount && order.cryptoPayment?.payAddress
-      ? `<b>Send:</b> <code>${escapeHtml(order.cryptoPayment.payAmount)}</code> ${escapeHtml(order.cryptoPayment.providerCurrency.toUpperCase())}\n<b>To:</b> <code>${escapeHtml(order.cryptoPayment.payAddress)}</code>`
-      : null,
+    payment ? `<b>Payment:</b> ${escapeHtml(payment.currencyLabel)}` : null,
+    surchargePercent > 0 ? `<b>Surcharge:</b> +${surchargePercent}%` : null,
     `<b>Shipping:</b> ${escapeHtml(order.shippingMethodPreference ?? "-")} (${money(order.shippingAmount ?? 0)} ${order.currency})`,
     order.shippingPickupPoint ? `<b>Pickup point:</b> ${escapeHtml(order.shippingPickupPoint)}` : null,
     "",

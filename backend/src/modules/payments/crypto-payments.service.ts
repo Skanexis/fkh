@@ -335,7 +335,6 @@ async function refreshSelfCustodyPayment(payment: any) {
     .filter((transfer) => transferIsConfirmed(method.code, transfer))
     .reduce((sum, transfer) => sum + Number(transfer.amount), 0);
   const expected = Number(payment.payAmount);
-  const previousStatus = payment.providerStatus;
   const nextStatus = confirmedReceived >= expected
     ? "finished"
     : confirmedReceived > 0
@@ -346,7 +345,6 @@ async function refreshSelfCustodyPayment(payment: any) {
   const now = new Date();
   const shouldConfirmOrder = nextStatus === "finished" && payment.order.status === OrderStatus.pending;
   const shouldNotifyPayment = nextStatus === "finished" && !payment.paidAt;
-  const shouldNotifyUnderpayment = nextStatus === "partially_paid" && previousStatus !== "partially_paid";
 
   const updated = await prisma.$transaction(async (tx) => {
     await tx.cryptoPayment.update({
@@ -384,10 +382,6 @@ async function refreshSelfCustodyPayment(payment: any) {
 
   if (shouldNotifyPayment) {
     await notifyCryptoPaymentConfirmed(updated);
-  }
-
-  if (shouldNotifyUnderpayment) {
-    await notifyCryptoPaymentUnderpaid(updated);
   }
 }
 
@@ -595,40 +589,63 @@ function toJson(value: unknown) {
 
 async function notifyCryptoPaymentConfirmed(order: any) {
   if (!env.ORDER_NOTIFICATIONS_ENABLED || !env.TELEGRAM_ADMIN_CHAT_ID) return;
-  const payment = order.cryptoPayment;
   await sendTelegramJson("sendMessage", {
     chat_id: env.TELEGRAM_ADMIN_CHAT_ID,
     parse_mode: "HTML",
-    text: [
-      `✅ <b>Payment confirmed for ${escapeHtml(order.publicId)}</b>`,
-      "",
-      `<b>Status:</b> Confirmed`,
-      `<b>Total:</b> ${money(order.totalAmount)} ${order.currency}`,
-      payment ? `<b>Crypto:</b> ${escapeHtml(payment.currencyLabel)} (${escapeHtml(payment.network)})` : null,
-      payment?.actuallyPaid ? `<b>Paid:</b> ${escapeHtml(payment.actuallyPaid)} ${escapeHtml(payment.providerCurrency.toUpperCase())}` : null,
-      payment?.providerPaymentId ? `<b>Payment ID:</b> <code>${escapeHtml(payment.providerPaymentId)}</code>` : null,
-    ].filter(Boolean).join("\n"),
+    text: formatPaidOrderAdminMessage(order),
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📦 Delivery CSV", callback_data: `order_csv:${order.publicId}` }],
+      ],
+    },
   });
 }
 
-async function notifyCryptoPaymentUnderpaid(order: any) {
-  if (!env.ORDER_NOTIFICATIONS_ENABLED || !env.TELEGRAM_ADMIN_CHAT_ID) return;
+function formatPaidOrderAdminMessage(order: any) {
   const payment = order.cryptoPayment;
-  const remainingAmount = remainingCryptoAmount(payment);
-  await sendTelegramJson("sendMessage", {
-    chat_id: env.TELEGRAM_ADMIN_CHAT_ID,
-    parse_mode: "HTML",
-    text: [
-      `⚠️ <b>Payment underpaid for ${escapeHtml(order.publicId)}</b>`,
-      "",
-      `<b>Status:</b> Partially paid`,
-      `<b>Total:</b> ${money(order.totalAmount)} ${order.currency}`,
-      payment ? `<b>Crypto:</b> ${escapeHtml(payment.currencyLabel)} (${escapeHtml(payment.network)})` : null,
-      payment?.actuallyPaid ? `<b>Received:</b> ${escapeHtml(payment.actuallyPaid)} ${escapeHtml(payment.providerCurrency.toUpperCase())}` : null,
-      remainingAmount ? `<b>Remaining:</b> ${escapeHtml(remainingAmount)} ${escapeHtml(payment.providerCurrency.toUpperCase())}` : null,
-      payment?.providerPaymentId ? `<b>Payment ID:</b> <code>${escapeHtml(payment.providerPaymentId)}</code>` : null,
-    ].filter(Boolean).join("\n"),
-  });
+  const telegram = order.telegramUsernameSnapshot
+    ? `@${order.telegramUsernameSnapshot}`
+    : `ID ${order.telegramIdSnapshot}`;
+  const items = order.items
+    .map((item: any) => {
+      const lineTotal = money(item.lineTotal);
+      return `• ${escapeHtml(item.productNameSnapshot)} ${escapeHtml(item.priceTierLabelSnapshot)} x${item.quantity} = ${lineTotal} ${order.currency}`;
+    })
+    .join("\n");
+  const address = [
+    order.shippingFullName,
+    order.shippingCompany,
+    order.shippingAddressLine1,
+    order.shippingAddressLine2,
+    [order.shippingPostalCode, order.shippingCity, order.shippingRegion].filter(Boolean).join(" "),
+    order.shippingCountry,
+  ].filter(Boolean).join("\n");
+
+  return [
+    `✅ <b>Paid order ${escapeHtml(order.publicId)}</b>`,
+    "",
+    `<b>Status:</b> Paid / accepted`,
+    `<b>Customer:</b> ${escapeHtml(order.customerName)}`,
+    `<b>Telegram:</b> ${escapeHtml(telegram)}`,
+    `<b>Phone:</b> ${escapeHtml(order.shippingPhone ?? order.customerPhone ?? "-")}`,
+    `<b>Email:</b> ${escapeHtml(order.shippingEmail ?? order.customerEmail ?? "-")}`,
+    "",
+    "<b>Items:</b>",
+    items,
+    "",
+    `<b>Total:</b> ${money(order.totalAmount)} ${order.currency}`,
+    payment ? `<b>Payment:</b> ${escapeHtml(payment.currencyLabel)} (${escapeHtml(payment.network)})` : null,
+    payment?.actuallyPaid ? `<b>Paid:</b> ${escapeHtml(payment.actuallyPaid)} ${escapeHtml(payment.providerCurrency.toUpperCase())}` : null,
+    payment?.providerPaymentId ? `<b>Payment ID:</b> <code>${escapeHtml(payment.providerPaymentId)}</code>` : null,
+    `<b>Shipping:</b> ${escapeHtml(order.shippingMethodPreference ?? "-")} (${money(order.shippingAmount ?? 0)} ${order.currency})`,
+    order.shippingPickupPoint ? `<b>Pickup point:</b> ${escapeHtml(order.shippingPickupPoint)}` : null,
+    "",
+    "<b>Address:</b>",
+    escapeHtml(address || "-"),
+    order.shippingInstructions ? `\n<b>Delivery notes:</b>\n${escapeHtml(order.shippingInstructions)}` : null,
+    "",
+    "<i>Reply to this message with the tracking code to send it to the customer and complete the order.</i>",
+  ].filter(Boolean).join("\n");
 }
 
 function escapeHtml(value: unknown) {

@@ -628,6 +628,8 @@ function formatPaymentStatus(status: string, t: (key: string) => string) {
     partially_paid: t("cart.paymentStatusPartial"),
     failed: t("cart.paymentStatusFailed"),
     expired: t("cart.paymentStatusExpired"),
+    manual_pending: t("cart.paymentStatusManualPending"),
+    manual_accepted: t("cart.paymentStatusManualAccepted"),
   };
   return labels[status] ?? status;
 }
@@ -637,5 +639,5 @@ function canCancelPayment(order: ProfileOrder) {
   if (!payment || order.status !== "pending") return false;
   const actuallyPaid = payment.actuallyPaid ?? 0;
   const pendingAmount = payment.pendingAmount ?? 0;
-  return actuallyPaid <= 0 && pendingAmount <= 0 && payment.providerStatus !== "finished";
+  return actuallyPaid <= 0 && pendingAmount <= 0 && !["finished", "manual_accepted"].includes(payment.providerStatus);
 }
