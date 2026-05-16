@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { AlertCircle, ShoppingCart, Trash2, Minus, Plus, ArrowRight, Package, Coins, Copy, CheckCircle, Wallet } from "lucide-react";
+import { AlertCircle, ShoppingCart, Trash2, Minus, Plus, ArrowRight, Package, Coins, Copy, CheckCircle, Wallet, Search, MapPin, Loader2, LocateFixed } from "lucide-react";
 import { useCart, type CartItem } from "../store/cart-context";
 import { TopBar } from "../components/TopBar";
 import { useNavigate } from "react-router";
 import { useAuth } from "../auth/auth-context";
 import { TelegramLoginPanel } from "../auth/TelegramLoginPanel";
 import { apiRequest } from "../api/client";
-import { ApiCryptoPaymentMethod, ApiOrder, ApiShippingMethod } from "../api/types";
+import { ApiAddressSuggestion, ApiCryptoPaymentMethod, ApiOrder, ApiShippingMethod } from "../api/types";
 import { useI18n } from "../i18n";
 import { ProductImagePlaceholder } from "../components/ProductImagePlaceholder";
 
@@ -20,6 +20,7 @@ interface ShippingForm {
   region: string;
   postalCode: string;
   country: string;
+  countryCode: string;
   phone: string;
   email: string;
   pickupPoint: string;
@@ -37,6 +38,7 @@ const initialShippingForm: ShippingForm = {
   region: "",
   postalCode: "",
   country: "",
+  countryCode: "",
   phone: "",
   email: "",
   pickupPoint: "",
@@ -69,6 +71,11 @@ export function Cart() {
   const [createdOrder, setCreatedOrder] = useState<ApiOrder | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [cancelingPayment, setCancelingPayment] = useState(false);
+  const [addressQuery, setAddressQuery] = useState("");
+  const [addressResults, setAddressResults] = useState<ApiAddressSuggestion[]>([]);
+  const [addressSearching, setAddressSearching] = useState(false);
+  const [addressLocating, setAddressLocating] = useState(false);
+  const [addressSearchError, setAddressSearchError] = useState<string | null>(null);
   const selectedShippingMethod = shippingMethods.find((method) => method.id === selectedShippingMethodId);
   const selectedCryptoMethod = cryptoMethods.find((method) => method.code === selectedPaymentCurrency) ?? cryptoMethods[0];
   const shippingAmount = selectedShippingMethod?.priceAmount ?? 0;
@@ -89,6 +96,40 @@ export function Cart() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const query = addressQuery.trim();
+    if (!showShippingForm || query.length < 3) {
+      setAddressResults([]);
+      setAddressSearching(false);
+      setAddressSearchError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setAddressSearching(true);
+    const timer = window.setTimeout(() => {
+      apiRequest<ApiAddressSuggestion[]>(`/api/v1/address/search?q=${encodeURIComponent(query)}&limit=6`)
+        .then((results) => {
+          if (cancelled) return;
+          setAddressResults(results);
+          setAddressSearchError(null);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          setAddressResults([]);
+          setAddressSearchError(err instanceof Error ? err.message : t("cart.addressSearchError"));
+        })
+        .finally(() => {
+          if (!cancelled) setAddressSearching(false);
+        });
+    }, 450);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [addressQuery, showShippingForm, t]);
 
   useEffect(() => {
     if (!createdOrder) return;
@@ -531,24 +572,38 @@ export function Cart() {
             </div>
 
             <div className="grid grid-cols-1 gap-3">
-              <ShippingInput field="fullName" label={t("cart.fullName")} required value={shippingForm.fullName} error={shippingErrors.fullName} onChange={(value) => updateShipping("fullName", value)} />
-              <ShippingInput field="company" label={t("cart.company")} value={shippingForm.company} error={shippingErrors.company} onChange={(value) => updateShipping("company", value)} />
-              <ShippingInput field="addressLine1" label={t("cart.addressLine1")} required value={shippingForm.addressLine1} error={shippingErrors.addressLine1} onChange={(value) => updateShipping("addressLine1", value)} />
-              <ShippingInput field="addressLine2" label={t("cart.addressLine2")} value={shippingForm.addressLine2} error={shippingErrors.addressLine2} onChange={(value) => updateShipping("addressLine2", value)} />
+              <AddressSearchBox
+                query={addressQuery}
+                results={addressResults}
+                searching={addressSearching}
+                error={addressSearchError}
+                locating={addressLocating}
+                t={t}
+                onQueryChange={(value) => {
+                  setAddressQuery(value);
+                  setAddressSearchError(null);
+                }}
+                onSelect={applyAddressSuggestion}
+                onUseLocation={useCurrentLocationAddress}
+              />
+              <ShippingInput field="fullName" label={t("cart.fullName")} required autoComplete="name" value={shippingForm.fullName} error={shippingErrors.fullName} onChange={(value) => updateShipping("fullName", value)} />
+              <ShippingInput field="company" label={t("cart.company")} optionalLabel={t("cart.optional")} autoComplete="organization" value={shippingForm.company} error={shippingErrors.company} onChange={(value) => updateShipping("company", value)} />
+              <ShippingInput field="addressLine1" label={t("cart.addressLine1")} required autoComplete="address-line1" value={shippingForm.addressLine1} error={shippingErrors.addressLine1} onChange={(value) => updateShipping("addressLine1", value)} />
+              <ShippingInput field="addressLine2" label={t("cart.addressLine2")} optionalLabel={t("cart.optional")} autoComplete="address-line2" value={shippingForm.addressLine2} error={shippingErrors.addressLine2} onChange={(value) => updateShipping("addressLine2", value)} />
 
               <div className="grid grid-cols-2 gap-3">
-                <ShippingInput field="city" label={t("cart.city")} required value={shippingForm.city} error={shippingErrors.city} onChange={(value) => updateShipping("city", value)} />
-                <ShippingInput field="region" label={t("cart.region")} value={shippingForm.region} error={shippingErrors.region} onChange={(value) => updateShipping("region", value)} />
+                <ShippingInput field="city" label={t("cart.city")} required autoComplete="address-level2" value={shippingForm.city} error={shippingErrors.city} onChange={(value) => updateShipping("city", value)} />
+                <ShippingInput field="region" label={t("cart.region")} autoComplete="address-level1" value={shippingForm.region} error={shippingErrors.region} onChange={(value) => updateShipping("region", value)} />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <ShippingInput field="postalCode" label={t("cart.postalCode")} required value={shippingForm.postalCode} error={shippingErrors.postalCode} onChange={(value) => updateShipping("postalCode", value)} />
-                <ShippingInput field="country" label={t("cart.country")} required value={shippingForm.country} error={shippingErrors.country} onChange={(value) => updateShipping("country", value)} />
+                <ShippingInput field="postalCode" label={t("cart.postalCode")} required autoComplete="postal-code" value={shippingForm.postalCode} error={shippingErrors.postalCode} onChange={(value) => updateShipping("postalCode", value)} />
+                <ShippingInput field="country" label={t("cart.country")} required autoComplete="country-name" value={shippingForm.country} error={shippingErrors.country} onChange={(value) => updateShipping("country", value)} />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <ShippingInput field="phone" label={t("cart.phone")} required value={shippingForm.phone} error={shippingErrors.phone} onChange={(value) => updateShipping("phone", value)} />
-                <ShippingInput field="email" label={t("cart.email")} type="email" value={shippingForm.email} error={shippingErrors.email} onChange={(value) => updateShipping("email", value)} />
+                <ShippingInput field="phone" label={t("cart.phone")} required autoComplete="tel" type="tel" value={shippingForm.phone} error={shippingErrors.phone} onChange={(value) => updateShipping("phone", value)} />
+                <ShippingInput field="email" label={t("cart.email")} autoComplete="email" type="email" value={shippingForm.email} error={shippingErrors.email} onChange={(value) => updateShipping("email", value)} />
               </div>
 
               <label className="block" data-shipping-field="shippingMethod">
@@ -720,6 +775,57 @@ export function Cart() {
     setCheckoutError(null);
   }
 
+  function applyAddressSuggestion(suggestion: ApiAddressSuggestion) {
+    setShippingForm((current) => ({
+      ...current,
+      addressLine1: suggestion.addressLine1 || current.addressLine1,
+      city: suggestion.city || current.city,
+      region: suggestion.region || current.region,
+      postalCode: suggestion.postalCode || current.postalCode,
+      country: suggestion.country || current.country,
+      countryCode: suggestion.countryCode || current.countryCode,
+    }));
+    setShippingErrors((current) => ({
+      ...current,
+      addressLine1: undefined,
+      city: undefined,
+      region: undefined,
+      postalCode: undefined,
+      country: undefined,
+    }));
+    setAddressQuery(suggestion.displayName);
+    setAddressResults([]);
+    setAddressSearchError(null);
+    setCheckoutError(null);
+  }
+
+  async function useCurrentLocationAddress() {
+    if (!navigator.geolocation) {
+      setAddressSearchError(t("cart.geolocationUnavailable"));
+      return;
+    }
+
+    setAddressLocating(true);
+    setAddressSearchError(null);
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 120000,
+        });
+      });
+      const suggestion = await apiRequest<ApiAddressSuggestion>(
+        `/api/v1/address/reverse?lat=${encodeURIComponent(position.coords.latitude)}&lon=${encodeURIComponent(position.coords.longitude)}`,
+      );
+      applyAddressSuggestion(suggestion);
+    } catch (err) {
+      setAddressSearchError(err instanceof Error ? err.message : t("cart.geolocationError"));
+    } finally {
+      setAddressLocating(false);
+    }
+  }
+
   async function copyPaymentValue(fieldId: string, value: string) {
     await navigator.clipboard?.writeText(value).catch(() => undefined);
     setCopiedField(fieldId);
@@ -776,6 +882,8 @@ function ShippingInput({
   onChange,
   error,
   required,
+  optionalLabel,
+  autoComplete,
   type = "text",
 }: {
   field: keyof ShippingForm;
@@ -784,6 +892,8 @@ function ShippingInput({
   onChange: (value: string) => void;
   error?: string;
   required?: boolean;
+  optionalLabel?: string;
+  autoComplete?: string;
   type?: string;
 }) {
   return (
@@ -791,10 +901,12 @@ function ShippingInput({
       <span style={{ color: "#A0A0A0", fontSize: 12, fontWeight: 600 }}>
         {label}
         {required ? " *" : ""}
+        {!required && optionalLabel ? <span style={{ color: "#6B7280", fontWeight: 500 }}> · {optionalLabel}</span> : null}
       </span>
       <input
         value={value}
         type={type}
+        autoComplete={autoComplete}
         aria-invalid={Boolean(error)}
         onChange={(event) => onChange(event.target.value)}
         className="mt-1 w-full rounded-xl px-3 py-2 outline-none"
@@ -812,6 +924,105 @@ function ShippingInput({
 
 function FieldError({ message }: { message: string }) {
   return <p style={{ color: "#ef4444", fontSize: 11, lineHeight: 1.35, marginTop: 5 }}>{message}</p>;
+}
+
+function AddressSearchBox({
+  query,
+  results,
+  searching,
+  locating,
+  error,
+  onQueryChange,
+  onSelect,
+  onUseLocation,
+  t,
+}: {
+  query: string;
+  results: ApiAddressSuggestion[];
+  searching: boolean;
+  locating: boolean;
+  error: string | null;
+  onQueryChange: (value: string) => void;
+  onSelect: (suggestion: ApiAddressSuggestion) => void;
+  onUseLocation: () => void;
+  t: (key: string, values?: Record<string, string | number>) => string;
+}) {
+  return (
+    <div data-shipping-field="addressSearch">
+      <div className="flex items-center justify-between gap-3">
+        <span style={{ color: "#A0A0A0", fontSize: 12, fontWeight: 600 }}>{t("cart.addressSearch")}</span>
+        <span style={{ color: "#6B7280", fontSize: 11 }}>{t("cart.addressSearchPowered")}</span>
+      </div>
+      <div
+        className="mt-1 flex items-center gap-2 rounded-xl px-3 py-2"
+        style={{
+          background: "rgba(255,255,255,0.06)",
+          border: "1px solid rgba(255,255,255,0.08)",
+        }}
+      >
+        <Search size={15} color="#6B7280" />
+        <input
+          value={query}
+          onChange={(event) => onQueryChange(event.target.value)}
+          placeholder={t("cart.addressSearchPlaceholder")}
+          autoComplete="street-address"
+          className="min-w-0 flex-1 bg-transparent outline-none"
+          style={{ color: "#FFFFFF", fontSize: 14 }}
+        />
+        {searching && <Loader2 className="animate-spin" size={15} color="#FF4D6D" />}
+      </div>
+      <button
+        type="button"
+        onClick={onUseLocation}
+        disabled={locating}
+        className="mt-2 w-full rounded-xl px-3 py-2 flex items-center justify-center gap-2"
+        style={{
+          background: "rgba(255,77,109,0.1)",
+          border: "1px solid rgba(255,77,109,0.22)",
+          color: "#FF4D6D",
+          fontSize: 12,
+          fontWeight: 800,
+          opacity: locating ? 0.72 : 1,
+        }}
+      >
+        {locating ? <Loader2 className="animate-spin" size={14} /> : <LocateFixed size={14} />}
+        {locating ? t("cart.locatingAddress") : t("cart.useCurrentLocation")}
+      </button>
+
+      {(results.length > 0 || error) && (
+        <div
+          className="mt-2 rounded-xl overflow-hidden"
+          style={{ background: "#111113", border: "1px solid rgba(255,255,255,0.08)" }}
+        >
+          {error ? (
+            <p className="px-3 py-2" style={{ color: "#ef4444", fontSize: 12 }}>
+              {error}
+            </p>
+          ) : (
+            results.map((result) => (
+              <button
+                key={result.id}
+                type="button"
+                onClick={() => onSelect(result)}
+                className="w-full px-3 py-2.5 text-left flex items-start gap-2"
+                style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+              >
+                <MapPin size={15} color="#FF4D6D" className="mt-0.5 flex-shrink-0" />
+                <span className="min-w-0">
+                  <span className="block" style={{ color: "#FFFFFF", fontSize: 12, lineHeight: 1.35, fontWeight: 700 }}>
+                    {result.addressLine1 || result.displayName}
+                  </span>
+                  <span className="block" style={{ color: "#A0A0A0", fontSize: 11, lineHeight: 1.35, marginTop: 2 }}>
+                    {[result.postalCode, result.city, result.region, result.country].filter(Boolean).join(", ") || result.displayName}
+                  </span>
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function PaymentMethodCard({
@@ -1003,6 +1214,7 @@ function toShippingPayload(form: ShippingForm, shippingMethod?: ApiShippingMetho
     region: optionalString(form.region),
     postalCode: form.postalCode.trim(),
     country: form.country.trim(),
+    countryCode: optionalString(form.countryCode),
     phone: form.phone.trim(),
     email: optionalString(form.email),
     pickupPoint: optionalString(form.pickupPoint),

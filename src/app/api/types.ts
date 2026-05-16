@@ -242,3 +242,16 @@ export interface ApiShippingMethod {
   isActive: boolean;
   sortOrder: number;
 }
+
+export interface ApiAddressSuggestion {
+  id: string;
+  displayName: string;
+  addressLine1: string;
+  city: string;
+  region: string;
+  postalCode: string;
+  country: string;
+  countryCode?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+}
