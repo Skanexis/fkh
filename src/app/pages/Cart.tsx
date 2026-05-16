@@ -572,23 +572,33 @@ export function Cart() {
             </div>
 
             <div className="grid grid-cols-1 gap-3">
-              <AddressSearchBox
+              <ShippingInput field="fullName" label={t("cart.fullName")} required autoComplete="name" value={shippingForm.fullName} error={shippingErrors.fullName} onChange={(value) => updateShipping("fullName", value)} />
+              <ShippingInput field="company" label={t("cart.company")} optionalLabel={t("cart.optional")} autoComplete="organization" value={shippingForm.company} error={shippingErrors.company} onChange={(value) => updateShipping("company", value)} />
+              <AddressAutocompleteInput
+                value={shippingForm.addressLine1}
                 query={addressQuery}
                 results={addressResults}
                 searching={addressSearching}
                 error={addressSearchError}
                 locating={addressLocating}
+                label={t("cart.addressLine1")}
+                required
+                field="addressLine1"
+                autoComplete="address-line1"
                 t={t}
-                onQueryChange={(value) => {
+                onChange={(value) => {
+                  updateShipping("addressLine1", value);
                   setAddressQuery(value);
                   setAddressSearchError(null);
                 }}
-                onSelect={applyAddressSuggestion}
+                onSelect={selectAddressSuggestion}
                 onUseLocation={useCurrentLocationAddress}
+                onManual={() => {
+                  setAddressResults([]);
+                  setAddressSearchError(null);
+                }}
               />
-              <ShippingInput field="fullName" label={t("cart.fullName")} required autoComplete="name" value={shippingForm.fullName} error={shippingErrors.fullName} onChange={(value) => updateShipping("fullName", value)} />
-              <ShippingInput field="company" label={t("cart.company")} optionalLabel={t("cart.optional")} autoComplete="organization" value={shippingForm.company} error={shippingErrors.company} onChange={(value) => updateShipping("company", value)} />
-              <ShippingInput field="addressLine1" label={t("cart.addressLine1")} required autoComplete="address-line1" value={shippingForm.addressLine1} error={shippingErrors.addressLine1} onChange={(value) => updateShipping("addressLine1", value)} />
+              {shippingErrors.addressLine1 && <FieldError message={shippingErrors.addressLine1} />}
               <ShippingInput field="addressLine2" label={t("cart.addressLine2")} optionalLabel={t("cart.optional")} autoComplete="address-line2" value={shippingForm.addressLine2} error={shippingErrors.addressLine2} onChange={(value) => updateShipping("addressLine2", value)} />
 
               <div className="grid grid-cols-2 gap-3">
@@ -636,7 +646,7 @@ export function Cart() {
                 </select>
                 {shippingErrors.shippingMethod && <FieldError message={shippingErrors.shippingMethod} />}
               </label>
-              <ShippingInput field="pickupPoint" label={t("cart.pickupPoint")} value={shippingForm.pickupPoint} error={shippingErrors.pickupPoint} onChange={(value) => updateShipping("pickupPoint", value)} />
+              <ShippingInput field="pickupPoint" label={t("cart.pickupPoint")} optionalLabel={t("cart.optional")} value={shippingForm.pickupPoint} error={shippingErrors.pickupPoint} onChange={(value) => updateShipping("pickupPoint", value)} />
 
               <div data-shipping-field="paymentMethod">
                 <div className="flex items-center justify-between gap-3">
@@ -793,10 +803,34 @@ export function Cart() {
       postalCode: undefined,
       country: undefined,
     }));
-    setAddressQuery(suggestion.displayName);
+    setAddressQuery(suggestion.addressLine1 || suggestion.displayName);
     setAddressResults([]);
     setAddressSearchError(null);
     setCheckoutError(null);
+  }
+
+  async function selectAddressSuggestion(suggestion: ApiAddressSuggestion) {
+    if (suggestion.postalCode || suggestion.latitude === null || suggestion.latitude === undefined || suggestion.longitude === null || suggestion.longitude === undefined) {
+      applyAddressSuggestion(suggestion);
+      return;
+    }
+
+    setAddressSearching(true);
+    try {
+      const detailed = await apiRequest<ApiAddressSuggestion>(
+        `/api/v1/address/reverse?lat=${encodeURIComponent(suggestion.latitude)}&lon=${encodeURIComponent(suggestion.longitude)}`,
+      );
+      applyAddressSuggestion({
+        ...suggestion,
+        ...detailed,
+        displayName: suggestion.displayName,
+        addressLine1: detailed.addressLine1 || suggestion.addressLine1,
+      });
+    } catch {
+      applyAddressSuggestion(suggestion);
+    } finally {
+      setAddressSearching(false);
+    }
   }
 
   async function useCurrentLocationAddress() {
@@ -850,6 +884,7 @@ function PaymentLine({
   onCopy?: (fieldId: string, value: string) => void;
   tone?: "default" | "warning";
 }) {
+  const { t } = useI18n();
   const copied = Boolean(fieldId && copiedField === fieldId);
   const valueColor = tone === "warning" ? "#f59e0b" : "#FFFFFF";
   return (
@@ -865,7 +900,7 @@ function PaymentLine({
             onClick={() => onCopy(fieldId, copyValue)}
             className="rounded-lg p-2 flex-shrink-0"
             style={{ background: copied ? "rgba(34,197,94,0.16)" : "rgba(255,255,255,0.07)" }}
-            aria-label={copied ? "Copied" : "Copy"}
+            aria-label={copied ? t("common.copied") : t("common.copy")}
           >
             {copied ? <CheckCircle size={15} color="#22c55e" /> : <Copy size={15} color="#A0A0A0" />}
           </button>
@@ -926,31 +961,47 @@ function FieldError({ message }: { message: string }) {
   return <p style={{ color: "#ef4444", fontSize: 11, lineHeight: 1.35, marginTop: 5 }}>{message}</p>;
 }
 
-function AddressSearchBox({
+function AddressAutocompleteInput({
+  value,
   query,
   results,
   searching,
   locating,
   error,
-  onQueryChange,
+  label,
+  required,
+  field,
+  autoComplete,
+  onChange,
   onSelect,
   onUseLocation,
+  onManual,
   t,
 }: {
+  value: string;
   query: string;
   results: ApiAddressSuggestion[];
   searching: boolean;
   locating: boolean;
   error: string | null;
-  onQueryChange: (value: string) => void;
+  label: string;
+  required?: boolean;
+  field: keyof ShippingForm;
+  autoComplete?: string;
+  onChange: (value: string) => void;
   onSelect: (suggestion: ApiAddressSuggestion) => void;
   onUseLocation: () => void;
+  onManual: () => void;
   t: (key: string, values?: Record<string, string | number>) => string;
 }) {
+  const showManualFallback = query.trim().length >= 3 && !searching && !error && results.length === 0;
   return (
-    <div data-shipping-field="addressSearch">
+    <div data-shipping-field={field}>
       <div className="flex items-center justify-between gap-3">
-        <span style={{ color: "#A0A0A0", fontSize: 12, fontWeight: 600 }}>{t("cart.addressSearch")}</span>
+        <span style={{ color: "#A0A0A0", fontSize: 12, fontWeight: 600 }}>
+          {label}
+          {required ? " *" : ""}
+        </span>
         <span style={{ color: "#6B7280", fontSize: 11 }}>{t("cart.addressSearchPowered")}</span>
       </div>
       <div
@@ -962,34 +1013,31 @@ function AddressSearchBox({
       >
         <Search size={15} color="#6B7280" />
         <input
-          value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
           placeholder={t("cart.addressSearchPlaceholder")}
-          autoComplete="street-address"
+          autoComplete={autoComplete}
           className="min-w-0 flex-1 bg-transparent outline-none"
           style={{ color: "#FFFFFF", fontSize: 14 }}
         />
         {searching && <Loader2 className="animate-spin" size={15} color="#FF4D6D" />}
+        <button
+          type="button"
+          onClick={onUseLocation}
+          disabled={locating}
+          className="rounded-lg p-1.5 flex-shrink-0"
+          style={{
+            background: locating ? "rgba(255,255,255,0.07)" : "rgba(255,77,109,0.12)",
+            color: locating ? "#A0A0A0" : "#FF4D6D",
+          }}
+          aria-label={locating ? t("cart.locatingAddress") : t("cart.useCurrentLocation")}
+          title={locating ? t("cart.locatingAddress") : t("cart.useCurrentLocation")}
+        >
+          {locating ? <Loader2 className="animate-spin" size={15} /> : <LocateFixed size={15} />}
+        </button>
       </div>
-      <button
-        type="button"
-        onClick={onUseLocation}
-        disabled={locating}
-        className="mt-2 w-full rounded-xl px-3 py-2 flex items-center justify-center gap-2"
-        style={{
-          background: "rgba(255,77,109,0.1)",
-          border: "1px solid rgba(255,77,109,0.22)",
-          color: "#FF4D6D",
-          fontSize: 12,
-          fontWeight: 800,
-          opacity: locating ? 0.72 : 1,
-        }}
-      >
-        {locating ? <Loader2 className="animate-spin" size={14} /> : <LocateFixed size={14} />}
-        {locating ? t("cart.locatingAddress") : t("cart.useCurrentLocation")}
-      </button>
 
-      {(results.length > 0 || error) && (
+      {query.trim().length >= 3 && (results.length > 0 || error || showManualFallback) && (
         <div
           className="mt-2 rounded-xl overflow-hidden"
           style={{ background: "#111113", border: "1px solid rgba(255,255,255,0.08)" }}
@@ -998,6 +1046,23 @@ function AddressSearchBox({
             <p className="px-3 py-2" style={{ color: "#ef4444", fontSize: 12 }}>
               {error}
             </p>
+          ) : showManualFallback ? (
+            <div className="p-3">
+              <p style={{ color: "#E5E7EB", fontSize: 12, lineHeight: 1.45, fontWeight: 700 }}>
+                {t("cart.addressNotFound")}
+              </p>
+              <p style={{ color: "#A0A0A0", fontSize: 11, lineHeight: 1.45, marginTop: 3 }}>
+                {t("cart.addressManualHint")}
+              </p>
+              <button
+                type="button"
+                onClick={onManual}
+                className="mt-3 w-full rounded-lg py-2"
+                style={{ background: "rgba(255,255,255,0.07)", color: "#FFFFFF", fontSize: 12, fontWeight: 800 }}
+              >
+                {t("cart.fillManually")}
+              </button>
+            </div>
           ) : (
             results.map((result) => (
               <button

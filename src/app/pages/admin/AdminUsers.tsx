@@ -307,7 +307,7 @@ export function AdminUsers() {
                     className="rounded-xl p-3 mb-5"
                     style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
                   >
-                    <p style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 13, marginBottom: 10 }}>Crypto spent</p>
+                    <p style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 13, marginBottom: 10 }}>{t("admin.cryptoSpent")}</p>
                     <div className="flex flex-col gap-2">
                       {selectedUser.paymentCurrencies.map((currency) => (
                         <div
@@ -316,7 +316,7 @@ export function AdminUsers() {
                         >
                           <div>
                             <p style={{ color: "#E5E7EB", fontSize: 12, fontWeight: 700 }}>{currency.currencyLabel}</p>
-                            <p style={{ color: "#6B7280", fontSize: 11 }}>{currency.network} · {currency.orderCount} paid orders</p>
+                            <p style={{ color: "#6B7280", fontSize: 11 }}>{currency.network} · {t("admin.paidOrdersCount", { count: currency.orderCount })}</p>
                           </div>
                           <div className="text-right">
                             <p style={{ color: "#22c55e", fontSize: 12, fontWeight: 800 }}>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Maximize2, Pause, Play, Volume2, VolumeX } from "lucide-react";
 import { ProductMedia } from "../data/products";
+import { useI18n } from "../i18n";
 
 interface ProductMediaPlayerProps {
   media: ProductMedia;
@@ -8,6 +9,7 @@ interface ProductMediaPlayerProps {
 }
 
 export function ProductMediaPlayer({ media, title }: ProductMediaPlayerProps) {
+  const { t } = useI18n();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -75,7 +77,7 @@ export function ProductMediaPlayer({ media, title }: ProductMediaPlayerProps) {
       <button
         type="button"
         onClick={() => void togglePlay()}
-        aria-label={isPlaying ? "Pause video" : "Play video"}
+        aria-label={isPlaying ? t("media.pauseVideo") : t("media.playVideo")}
         className="absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full"
         style={{
           width: 62,
@@ -106,7 +108,7 @@ export function ProductMediaPlayer({ media, title }: ProductMediaPlayerProps) {
             <button
               type="button"
               onClick={toggleMute}
-              aria-label={isMuted ? "Unmute video" : "Mute video"}
+              aria-label={isMuted ? t("media.unmuteVideo") : t("media.muteVideo")}
               className="rounded-full p-2"
               style={{ background: "rgba(255,255,255,0.1)" }}
             >
@@ -115,7 +117,7 @@ export function ProductMediaPlayer({ media, title }: ProductMediaPlayerProps) {
             <button
               type="button"
               onClick={() => void requestFullscreen()}
-              aria-label="Fullscreen video"
+              aria-label={t("media.fullscreenVideo")}
               className="rounded-full p-2"
               style={{ background: "rgba(255,255,255,0.1)" }}
             >
@@ -130,7 +132,7 @@ export function ProductMediaPlayer({ media, title }: ProductMediaPlayerProps) {
           step={0.1}
           value={Math.min(currentTime, duration || currentTime)}
           onChange={(event) => seek(event.target.value)}
-          aria-label="Video progress"
+          aria-label={t("media.videoProgress")}
           className="w-full"
           style={{ accentColor: "#FF4D6D" }}
         />

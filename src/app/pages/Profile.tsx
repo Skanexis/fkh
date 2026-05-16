@@ -592,6 +592,7 @@ function PaymentLine({
   onCopy?: (fieldId: string, value: string) => void;
   tone?: "warning";
 }) {
+  const { t } = useI18n();
   const copied = fieldId && copiedField === fieldId;
   return (
     <div className="py-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
@@ -608,7 +609,7 @@ function PaymentLine({
           >
             <Copy size={13} color={copied ? "#22c55e" : "#A0A0A0"} />
             <span style={{ color: copied ? "#22c55e" : "#A0A0A0", fontSize: 11, fontWeight: 800 }}>
-              {copied ? "OK" : "Copy"}
+              {copied ? t("common.ok") : t("common.copy")}
             </span>
           </button>
         )}

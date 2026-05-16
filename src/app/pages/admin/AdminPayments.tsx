@@ -8,13 +8,13 @@ import { useBodyScrollLock } from "../../components/useBodyScrollLock";
 
 type PaymentStatus = "waiting" | "confirming" | "partially_paid" | "finished" | "expired" | "failed";
 
-const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: typeof Clock }> = {
-  waiting: { label: "Waiting", color: "#F59E0B", bg: "rgba(245,158,11,0.12)", icon: Clock },
-  confirming: { label: "Confirming", color: "#3B82F6", bg: "rgba(59,130,246,0.12)", icon: Clock },
-  partially_paid: { label: "Partial", color: "#F97316", bg: "rgba(249,115,22,0.12)", icon: AlertTriangle },
-  finished: { label: "Paid", color: "#22c55e", bg: "rgba(34,197,94,0.12)", icon: CheckCircle },
-  expired: { label: "Expired", color: "#6B7280", bg: "rgba(107,114,128,0.12)", icon: AlertTriangle },
-  failed: { label: "Failed", color: "#ef4444", bg: "rgba(239,68,68,0.12)", icon: AlertTriangle },
+const STATUS_CONFIG: Record<string, { labelKey: string; color: string; bg: string; icon: typeof Clock }> = {
+  waiting: { labelKey: "cart.paymentStatusWaiting", color: "#F59E0B", bg: "rgba(245,158,11,0.12)", icon: Clock },
+  confirming: { labelKey: "cart.paymentStatusConfirming", color: "#3B82F6", bg: "rgba(59,130,246,0.12)", icon: Clock },
+  partially_paid: { labelKey: "cart.paymentStatusPartial", color: "#F97316", bg: "rgba(249,115,22,0.12)", icon: AlertTriangle },
+  finished: { labelKey: "cart.paymentStatusFinished", color: "#22c55e", bg: "rgba(34,197,94,0.12)", icon: CheckCircle },
+  expired: { labelKey: "cart.paymentStatusExpired", color: "#6B7280", bg: "rgba(107,114,128,0.12)", icon: AlertTriangle },
+  failed: { labelKey: "cart.paymentStatusFailed", color: "#ef4444", bg: "rgba(239,68,68,0.12)", icon: AlertTriangle },
 };
 
 export function AdminPayments() {
@@ -38,7 +38,7 @@ export function AdminPayments() {
       setPayments(apiPayments);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Payments error");
+      setError(err instanceof Error ? err.message : t("admin.paymentsError"));
     }
   }
 
@@ -90,16 +90,16 @@ export function AdminPayments() {
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-5">
         <h1 style={{ color: "#FFFFFF", fontWeight: 800, fontSize: 22 }}>{t("admin.payments")}</h1>
         <p style={{ color: error ? "#ef4444" : "#6B7280", fontSize: 13 }}>
-          {error ? `${t("common.backend")}: ${error}` : `${payments.length} crypto payments`}
+          {error ? `${t("common.backend")}: ${error}` : t("admin.totalPayments", { count: payments.length })}
         </p>
       </motion.div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
-        <SummaryCard label="Paid" value={totals.paid} color="#22c55e" bg="rgba(34,197,94,0.1)" />
-        <SummaryCard label="Pending" value={totals.pending} color="#3B82F6" bg="rgba(59,130,246,0.1)" />
-        <SummaryCard label="Partial" value={totals.partial} color="#F97316" bg="rgba(249,115,22,0.1)" />
-        <SummaryCard label="Expired" value={totals.expired} color="#6B7280" bg="rgba(107,114,128,0.1)" />
-        <SummaryCard label="Paid EUR" value={`€${formatFiat(totals.revenue)}`} color="#FF4D6D" bg="rgba(255,77,109,0.1)" />
+        <SummaryCard label={t("cart.paymentStatusFinished")} value={totals.paid} color="#22c55e" bg="rgba(34,197,94,0.1)" />
+        <SummaryCard label={t("admin.pending")} value={totals.pending} color="#3B82F6" bg="rgba(59,130,246,0.1)" />
+        <SummaryCard label={t("cart.paymentStatusPartial")} value={totals.partial} color="#F97316" bg="rgba(249,115,22,0.1)" />
+        <SummaryCard label={t("cart.paymentStatusExpired")} value={totals.expired} color="#6B7280" bg="rgba(107,114,128,0.1)" />
+        <SummaryCard label={t("admin.paidEur")} value={`€${formatFiat(totals.revenue)}`} color="#FF4D6D" bg="rgba(255,77,109,0.1)" />
       </div>
 
       <div
@@ -110,7 +110,7 @@ export function AdminPayments() {
         <input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search payments, orders, address..."
+          placeholder={t("admin.searchPayments")}
           className="flex-1 bg-transparent outline-none"
           style={{ color: "#FFFFFF", fontSize: 14 }}
         />
@@ -131,7 +131,7 @@ export function AdminPayments() {
               fontWeight: 700,
             }}
           >
-            {status === "all" ? "All" : STATUS_CONFIG[status]?.label ?? status}
+            {status === "all" ? t("catalog.all") : t(STATUS_CONFIG[status]?.labelKey ?? status)}
           </button>
         ))}
       </div>
@@ -156,7 +156,7 @@ export function AdminPayments() {
                     <p style={{ color: "#FFFFFF", fontWeight: 800, fontSize: 14 }}>{payment.order.publicId}</p>
                     <span className="flex items-center gap-1 px-2 py-0.5 rounded-full" style={{ background: cfg.bg }}>
                       <Icon size={10} color={cfg.color} strokeWidth={2.5} />
-                      <span style={{ color: cfg.color, fontSize: 10, fontWeight: 700 }}>{cfg.label}</span>
+                      <span style={{ color: cfg.color, fontSize: 10, fontWeight: 700 }}>{t(cfg.labelKey)}</span>
                     </span>
                   </div>
                   <p style={{ color: "#9CA3AF", fontSize: 12 }}>{payment.order.customerName}</p>
@@ -187,17 +187,17 @@ export function AdminPayments() {
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                <Metric label="Asset" value={`${payment.currencyLabel} · ${payment.network}`} />
-                <Metric label="Expected" value={`${formatCrypto(payment.payAmount)} ${payment.providerCurrency.toUpperCase()}`} />
-                <Metric label="Received" value={`${formatCrypto(payment.actuallyPaid)} ${payment.providerCurrency.toUpperCase()}`} />
-                <Metric label="Remaining" value={`${formatCrypto(payment.remainingAmount)} ${payment.providerCurrency.toUpperCase()}`} tone={payment.isUnderpaid ? "#F97316" : undefined} />
+                <Metric label={t("admin.asset")} value={`${payment.currencyLabel} · ${payment.network}`} />
+                <Metric label={t("admin.expected")} value={`${formatCrypto(payment.payAmount)} ${payment.providerCurrency.toUpperCase()}`} />
+                <Metric label={t("cart.paymentReceived")} value={`${formatCrypto(payment.actuallyPaid)} ${payment.providerCurrency.toUpperCase()}`} />
+                <Metric label={t("cart.paymentRemaining")} value={`${formatCrypto(payment.remainingAmount)} ${payment.providerCurrency.toUpperCase()}`} tone={payment.isUnderpaid ? "#F97316" : undefined} />
               </div>
             </motion.div>
           );
         })}
         {filtered.length === 0 && (
           <p className="rounded-xl p-4" style={{ background: "#111827", color: "#6B7280", fontSize: 13 }}>
-            No payments found.
+            {t("admin.noPayments")}
           </p>
         )}
       </div>
@@ -256,7 +256,7 @@ function PaymentModal({
       >
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
           <div>
-            <h3 style={{ color: "#FFFFFF", fontWeight: 800, fontSize: 16 }}>Payment {payment.order.publicId}</h3>
+            <h3 style={{ color: "#FFFFFF", fontWeight: 800, fontSize: 16 }}>{t("admin.paymentDetailTitle", { order: payment.order.publicId })}</h3>
             <p style={{ color: "#6B7280", fontSize: 12 }}>{new Date(payment.createdAt).toLocaleString(locale)}</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg" style={{ background: "rgba(255,255,255,0.07)" }}>
@@ -268,29 +268,29 @@ function PaymentModal({
           <div className="flex items-center gap-2 mb-4">
             <span className="flex items-center gap-1 px-2 py-1 rounded-full" style={{ background: cfg.bg }}>
               <Icon size={12} color={cfg.color} strokeWidth={2.5} />
-              <span style={{ color: cfg.color, fontSize: 11, fontWeight: 800 }}>{cfg.label}</span>
+              <span style={{ color: cfg.color, fontSize: 11, fontWeight: 800 }}>{t(cfg.labelKey)}</span>
             </span>
-            <span style={{ color: "#9CA3AF", fontSize: 12 }}>{payment.currencyLabel} on {payment.network}</span>
+            <span style={{ color: "#9CA3AF", fontSize: 12 }}>{t("admin.paymentAssetNetwork", { asset: payment.currencyLabel, network: payment.network })}</span>
           </div>
 
           <div className="grid grid-cols-2 gap-3 mb-5">
-            <MetricBox label="Order total" value={`€${formatFiat(payment.priceAmount)}`} />
-            <MetricBox label="Invoice amount" value={`${formatCrypto(payment.payAmount)} ${payment.providerCurrency.toUpperCase()}`} />
-            <MetricBox label="Confirmed" value={`${formatCrypto(payment.actuallyPaid)} ${payment.providerCurrency.toUpperCase()}`} />
-            <MetricBox label="Pending chain" value={`${formatCrypto(payment.pendingAmount)} ${payment.providerCurrency.toUpperCase()}`} />
-            <MetricBox label="Remaining" value={`${formatCrypto(payment.remainingAmount)} ${payment.providerCurrency.toUpperCase()}`} tone={payment.isUnderpaid ? "#F97316" : "#FFFFFF"} />
-            <MetricBox label="Paid at" value={payment.paidAt ? new Date(payment.paidAt).toLocaleString(locale) : "-"} />
+            <MetricBox label={t("cart.paymentFiat")} value={`€${formatFiat(payment.priceAmount)}`} />
+            <MetricBox label={t("admin.invoiceAmount")} value={`${formatCrypto(payment.payAmount)} ${payment.providerCurrency.toUpperCase()}`} />
+            <MetricBox label={t("admin.confirmed")} value={`${formatCrypto(payment.actuallyPaid)} ${payment.providerCurrency.toUpperCase()}`} />
+            <MetricBox label={t("admin.pendingChain")} value={`${formatCrypto(payment.pendingAmount)} ${payment.providerCurrency.toUpperCase()}`} />
+            <MetricBox label={t("cart.paymentRemaining")} value={`${formatCrypto(payment.remainingAmount)} ${payment.providerCurrency.toUpperCase()}`} tone={payment.isUnderpaid ? "#F97316" : "#FFFFFF"} />
+            <MetricBox label={t("admin.paidAt")} value={payment.paidAt ? new Date(payment.paidAt).toLocaleString(locale) : "-"} />
           </div>
 
           <div className="rounded-xl p-3 mb-5" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
             <div className="flex items-center gap-2 mb-3">
               <WalletCards size={15} color="#3B82F6" />
-              <p style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 13 }}>Wallet and invoice</p>
+              <p style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 13 }}>{t("admin.walletInvoice")}</p>
             </div>
-            <InfoLine label="Address" value={payment.payAddress} copy />
-            <InfoLine label="Payment ID" value={payment.providerPaymentId} />
-            <InfoLine label="Memo" value={payment.payinExtraId} copy />
-            <InfoLine label="Expires" value={payment.expiresAt ? new Date(payment.expiresAt).toLocaleString(locale) : "-"} />
+            <InfoLine label={t("cart.paymentAddress")} value={payment.payAddress} copy />
+            <InfoLine label={t("admin.paymentId")} value={payment.providerPaymentId} />
+            <InfoLine label={t("admin.memo")} value={payment.payinExtraId} copy />
+            <InfoLine label={t("admin.expires")} value={payment.expiresAt ? new Date(payment.expiresAt).toLocaleString(locale) : "-"} />
           </div>
 
           <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
@@ -305,7 +305,7 @@ function PaymentModal({
                 style={{ background: "rgba(59,130,246,0.12)", color: "#60A5FA", fontSize: 12, fontWeight: 700 }}
               >
                 <ExternalLink size={13} />
-                Orders
+                {t("admin.orders")}
               </a>
             </div>
           </div>

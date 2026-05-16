@@ -132,7 +132,7 @@ export function AdminOrders() {
       setSelectedOrder(next);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Tracking message was not sent");
+      setError(err instanceof Error ? err.message : t("admin.trackingError"));
     } finally {
       setTrackingSending(false);
     }
@@ -236,7 +236,7 @@ export function AdminOrders() {
                   <p style={{ color: "#6B7280", fontSize: 11, marginTop: 1 }}>{order.product}</p>
                   {order.payment && (
                     <p style={{ color: "#60A5FA", fontSize: 11, marginTop: 3 }}>
-                      {order.payment.currencyLabel} · {paymentStatusLabel(order.payment.providerStatus)} · received {formatCrypto(order.payment.actuallyPaid)} {order.payment.providerCurrency.toUpperCase()}
+                      {order.payment.currencyLabel} · {paymentStatusLabel(order.payment.providerStatus, t)} · {t("cart.paymentReceived").toLowerCase()} {formatCrypto(order.payment.actuallyPaid)} {order.payment.providerCurrency.toUpperCase()}
                     </p>
                   )}
                 </div>
@@ -316,7 +316,7 @@ export function AdminOrders() {
                   >
                     <div className="flex items-center gap-2 mb-3">
                       <WalletCards size={15} color="#3B82F6" />
-                      <p style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 13 }}>Payment</p>
+                      <p style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 13 }}>{t("admin.payment")}</p>
                       <span
                         className="px-2 py-0.5 rounded-full"
                         style={{
@@ -326,18 +326,18 @@ export function AdminOrders() {
                           fontWeight: 800,
                         }}
                       >
-                        {paymentStatusLabel(selectedOrder.payment.providerStatus)}
+                        {paymentStatusLabel(selectedOrder.payment.providerStatus, t)}
                       </span>
                     </div>
                     <div className="space-y-2">
-                      <DeliveryLine label="Asset" value={`${selectedOrder.payment.currencyLabel} (${selectedOrder.payment.network})`} />
-                      <DeliveryLine label="Expected" value={`${formatCrypto(selectedOrder.payment.payAmount)} ${selectedOrder.payment.providerCurrency.toUpperCase()}`} />
-                      <DeliveryLine label="Confirmed" value={`${formatCrypto(selectedOrder.payment.actuallyPaid)} ${selectedOrder.payment.providerCurrency.toUpperCase()}`} />
-                      <DeliveryLine label="Pending" value={`${formatCrypto(selectedOrder.payment.pendingAmount)} ${selectedOrder.payment.providerCurrency.toUpperCase()}`} />
-                      <DeliveryLine label="Remaining" value={`${formatCrypto(selectedOrder.payment.remainingAmount)} ${selectedOrder.payment.providerCurrency.toUpperCase()}`} />
-                      <DeliveryLine label="Address" value={selectedOrder.payment.payAddress} />
-                      <DeliveryLine label="Payment ID" value={selectedOrder.payment.providerPaymentId} />
-                      <DeliveryLine label="Paid at" value={selectedOrder.payment.paidAt ? new Date(selectedOrder.payment.paidAt).toLocaleString(locale) : undefined} />
+                      <DeliveryLine label={t("admin.asset")} value={`${selectedOrder.payment.currencyLabel} (${selectedOrder.payment.network})`} />
+                      <DeliveryLine label={t("admin.expected")} value={`${formatCrypto(selectedOrder.payment.payAmount)} ${selectedOrder.payment.providerCurrency.toUpperCase()}`} />
+                      <DeliveryLine label={t("admin.confirmed")} value={`${formatCrypto(selectedOrder.payment.actuallyPaid)} ${selectedOrder.payment.providerCurrency.toUpperCase()}`} />
+                      <DeliveryLine label={t("admin.pendingChain")} value={`${formatCrypto(selectedOrder.payment.pendingAmount)} ${selectedOrder.payment.providerCurrency.toUpperCase()}`} />
+                      <DeliveryLine label={t("cart.paymentRemaining")} value={`${formatCrypto(selectedOrder.payment.remainingAmount)} ${selectedOrder.payment.providerCurrency.toUpperCase()}`} />
+                      <DeliveryLine label={t("cart.paymentAddress")} value={selectedOrder.payment.payAddress} />
+                      <DeliveryLine label={t("admin.paymentId")} value={selectedOrder.payment.providerPaymentId} />
+                      <DeliveryLine label={t("admin.paidAt")} value={selectedOrder.payment.paidAt ? new Date(selectedOrder.payment.paidAt).toLocaleString(locale) : undefined} />
                     </div>
                     <button
                       type="button"
@@ -365,33 +365,33 @@ export function AdminOrders() {
                 >
                   <div className="flex items-center gap-2 mb-3">
                     <MapPin size={15} color="#FF4D6D" />
-                    <p style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 13 }}>Delivery</p>
+                    <p style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 13 }}>{t("admin.delivery")}</p>
                   </div>
                   <div className="space-y-2">
-                    <DeliveryLine label="Recipient" value={selectedOrder.shipping?.fullName} />
-                    <DeliveryLine label="Company" value={selectedOrder.shipping?.company} />
+                    <DeliveryLine label={t("admin.recipient")} value={selectedOrder.shipping?.fullName} />
+                    <DeliveryLine label={t("cart.company")} value={selectedOrder.shipping?.company} />
                     <DeliveryLine
-                      label="Address"
+                      label={t("cart.addressLine1")}
                       value={formatAddress(selectedOrder.shipping)}
                     />
                     <DeliveryLine
                       icon={<Phone size={13} color="#6B7280" />}
-                      label="Phone"
+                      label={t("cart.phone")}
                       value={selectedOrder.shipping?.phone ?? selectedOrder.customerPhone}
                     />
                     <DeliveryLine
                       icon={<Mail size={13} color="#6B7280" />}
-                      label="Email"
+                      label={t("cart.email")}
                       value={selectedOrder.shipping?.email ?? selectedOrder.customerEmail}
                     />
-                    <DeliveryLine label="VAT / Tax ID" value={selectedOrder.shipping?.taxId} />
+                    <DeliveryLine label={t("admin.vatTaxId")} value={selectedOrder.shipping?.taxId} />
                     <DeliveryLine
                       icon={<Truck size={13} color="#6B7280" />}
-                      label="Carrier"
+                      label={t("admin.carrier")}
                       value={selectedOrder.shipping?.methodPreference}
                     />
-                    <DeliveryLine label="Pickup point" value={selectedOrder.shipping?.pickupPoint} />
-                    <DeliveryLine label="Instructions" value={selectedOrder.shipping?.instructions} />
+                    <DeliveryLine label={t("admin.pickupPoint")} value={selectedOrder.shipping?.pickupPoint} />
+                    <DeliveryLine label={t("admin.instructions")} value={selectedOrder.shipping?.instructions} />
                   </div>
                 </div>
 
@@ -401,32 +401,32 @@ export function AdminOrders() {
                 >
                   <div className="flex items-center gap-2 mb-3">
                     <Send size={15} color="#22c55e" />
-                    <p style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 13 }}>Tracking</p>
+                    <p style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 13 }}>{t("admin.tracking")}</p>
                   </div>
                   {selectedOrder.tracking?.sentAt && (
                     <p className="mb-3" style={{ color: "#22c55e", fontSize: 12 }}>
-                      Sent {new Date(selectedOrder.tracking.sentAt).toLocaleString(locale)}
+                      {t("admin.trackingSentAt", { date: new Date(selectedOrder.tracking.sentAt).toLocaleString(locale) })}
                     </p>
                   )}
                   <div className="space-y-2">
                     <input
                       value={trackingCode}
                       onChange={(event) => setTrackingCode(event.target.value)}
-                      placeholder="Tracking code"
+                      placeholder={t("admin.trackingCode")}
                       className="w-full rounded-xl px-3 py-2.5 bg-transparent outline-none"
                       style={{ border: "1px solid rgba(255,255,255,0.08)", color: "#FFFFFF", fontSize: 13 }}
                     />
                     <input
                       value={trackingUrl}
                       onChange={(event) => setTrackingUrl(event.target.value)}
-                      placeholder="Tracking link"
+                      placeholder={t("admin.trackingLink")}
                       className="w-full rounded-xl px-3 py-2.5 bg-transparent outline-none"
                       style={{ border: "1px solid rgba(255,255,255,0.08)", color: "#FFFFFF", fontSize: 13 }}
                     />
                     <textarea
                       value={trackingMessage}
                       onChange={(event) => setTrackingMessage(event.target.value)}
-                      placeholder="Message to customer"
+                      placeholder={t("admin.trackingMessage")}
                       rows={3}
                       className="w-full rounded-xl px-3 py-2.5 bg-transparent outline-none resize-none"
                       style={{ border: "1px solid rgba(255,255,255,0.08)", color: "#FFFFFF", fontSize: 13 }}
@@ -444,7 +444,7 @@ export function AdminOrders() {
                       }}
                     >
                       <Send size={15} />
-                      {trackingSending ? "Sending..." : "Send tracking and complete"}
+                      {trackingSending ? t("admin.trackingSending") : t("admin.sendTrackingComplete")}
                     </button>
                   </div>
                 </div>
@@ -536,14 +536,14 @@ function formatAddress(shipping: ApiOrder["shipping"]) {
   return [shipping.addressLine1, shipping.addressLine2, cityLine, countryLine].filter(Boolean).join("\n");
 }
 
-function paymentStatusLabel(status: string) {
+function paymentStatusLabel(status: string, t: (key: string) => string) {
   const labels: Record<string, string> = {
-    waiting: "waiting",
-    confirming: "confirming",
-    partially_paid: "partial",
-    finished: "paid",
-    expired: "expired",
-    failed: "failed",
+    waiting: t("cart.paymentStatusWaiting"),
+    confirming: t("cart.paymentStatusConfirming"),
+    partially_paid: t("cart.paymentStatusPartial"),
+    finished: t("cart.paymentStatusFinished"),
+    expired: t("cart.paymentStatusExpired"),
+    failed: t("cart.paymentStatusFailed"),
   };
   return labels[status] ?? status;
 }

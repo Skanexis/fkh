@@ -49,7 +49,7 @@ export function Dashboard() {
         const data = await apiRequest<DashboardStats>("/api/v1/admin/dashboard");
         if (!cancelled) setDashboard(data);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Dashboard error");
+        if (!cancelled) setError(err instanceof Error ? err.message : t("admin.dashboardError"));
       }
     }
     void loadDashboard();
@@ -113,7 +113,7 @@ export function Dashboard() {
         animate={{ opacity: 1, y: 0 }}
         className="mb-6"
       >
-        <h1 style={{ color: "#FFFFFF", fontWeight: 800, fontSize: 24 }}>Dashboard</h1>
+        <h1 style={{ color: "#FFFFFF", fontWeight: 800, fontSize: 24 }}>{t("admin.dashboard")}</h1>
         <p style={{ color: "#6B7280", fontSize: 13, marginTop: 2 }}>
           {error ? `${t("common.backend")}: ${error}` : t("admin.welcome")}
         </p>
@@ -166,7 +166,7 @@ export function Dashboard() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 style={{ color: "#FFFFFF", fontWeight: 700, fontSize: 15 }}>{t("admin.payments")}</h3>
-              <p style={{ color: "#6B7280", fontSize: 12 }}>Crypto invoices and confirmed receipts</p>
+              <p style={{ color: "#6B7280", fontSize: 12 }}>{t("admin.paymentDashboardSubtitle")}</p>
             </div>
             <button onClick={() => navigate("/admin/payments")} className="flex items-center gap-1">
               <span style={{ color: "#3B82F6", fontSize: 12 }}>{t("admin.viewAll")}</span>
@@ -175,10 +175,10 @@ export function Dashboard() {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
-            <PaymentStat label="Paid" value={paymentStats.paidPayments} icon={WalletCards} color="#22c55e" bg="rgba(34,197,94,0.1)" />
-            <PaymentStat label="Pending" value={paymentStats.pendingPayments} icon={Clock} color="#3B82F6" bg="rgba(59,130,246,0.1)" />
-            <PaymentStat label="Partial" value={paymentStats.partialPayments} icon={AlertTriangle} color="#F97316" bg="rgba(249,115,22,0.1)" />
-            <PaymentStat label="Expired" value={paymentStats.expiredPayments} icon={AlertTriangle} color="#6B7280" bg="rgba(107,114,128,0.1)" />
+            <PaymentStat label={t("cart.paymentStatusFinished")} value={paymentStats.paidPayments} icon={WalletCards} color="#22c55e" bg="rgba(34,197,94,0.1)" />
+            <PaymentStat label={t("admin.pending")} value={paymentStats.pendingPayments} icon={Clock} color="#3B82F6" bg="rgba(59,130,246,0.1)" />
+            <PaymentStat label={t("cart.paymentStatusPartial")} value={paymentStats.partialPayments} icon={AlertTriangle} color="#F97316" bg="rgba(249,115,22,0.1)" />
+            <PaymentStat label={t("cart.paymentStatusExpired")} value={paymentStats.expiredPayments} icon={AlertTriangle} color="#6B7280" bg="rgba(107,114,128,0.1)" />
           </div>
 
           <div className="flex flex-col gap-2">
@@ -191,19 +191,19 @@ export function Dashboard() {
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p style={{ color: "#FFFFFF", fontSize: 13, fontWeight: 800 }}>{currency.currencyLabel}</p>
-                    <p style={{ color: "#6B7280", fontSize: 11 }}>{currency.network} · {currency.count} invoices</p>
+                    <p style={{ color: "#6B7280", fontSize: 11 }}>{currency.network} · {t("admin.invoicesCount", { count: currency.count })}</p>
                   </div>
                   <div className="text-right">
                     <p style={{ color: "#22c55e", fontSize: 13, fontWeight: 800 }}>
                       {formatCrypto(currency.receivedCrypto)} {currency.providerCurrency.toUpperCase()}
                     </p>
-                    <p style={{ color: "#6B7280", fontSize: 11 }}>€{formatFiat(currency.paidFiat)} paid</p>
+                    <p style={{ color: "#6B7280", fontSize: 11 }}>{t("admin.paidFiat", { amount: `€${formatFiat(currency.paidFiat)}` })}</p>
                   </div>
                 </div>
               </div>
             ))}
             {paymentStats.byCurrency.length === 0 && (
-              <p style={{ color: "#6B7280", fontSize: 12 }}>No crypto payments yet.</p>
+              <p style={{ color: "#6B7280", fontSize: 12 }}>{t("admin.noCryptoPaymentsYet")}</p>
             )}
           </div>
         </motion.div>
@@ -373,7 +373,7 @@ export function Dashboard() {
               </div>
               <div className="flex-1 min-w-0">
                 <p style={{ color: "#FFFFFF", fontSize: 13, fontWeight: 500 }}>{customer.name}</p>
-                <p style={{ color: "#6B7280", fontSize: 11 }}>{customer.orderCount} orders · {customer.lastOrderPublicId}</p>
+                <p style={{ color: "#6B7280", fontSize: 11 }}>{t("admin.ordersCount", { count: customer.orderCount })} · {customer.lastOrderPublicId}</p>
               </div>
               <span style={{ color: "#22c55e", fontWeight: 700, fontSize: 13 }}>€{formatFiat(customer.spent)}</span>
             </div>

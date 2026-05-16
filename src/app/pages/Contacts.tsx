@@ -76,13 +76,13 @@ export function Contacts() {
           }}
         >
           <p style={{ color: "#FFFFFF", fontWeight: 800, fontSize: 15, marginBottom: 10 }}>
-            Be BTC ready before making contact
+            {t("contacts.paymentPrepTitle")}
           </p>
           <div className="grid gap-2">
-            <InfoLine icon={<Globe2 size={14} color="#3B82F6" />} text="We talk: ES / US / FR / IT" />
-            <InfoLine icon={<PackageCheck size={14} color="#22c55e" />} text="Shipping worldwide and meet up Barcelona" />
-            <InfoLine icon={<CreditCard size={14} color="#FF4D6D" />} text="Payment: Crypto, Cash in Poste / CCPP, Bonifico +10%" />
-            <InfoLine icon={<PackageCheck size={14} color="#22c55e" />} text="Tracking available in 24h. Deposits Monday to Thursday." />
+            <InfoLine icon={<Globe2 size={14} color="#3B82F6" />} text={t("contacts.languages")} />
+            <InfoLine icon={<PackageCheck size={14} color="#22c55e" />} text={t("contacts.shippingMeetup")} />
+            <InfoLine icon={<CreditCard size={14} color="#FF4D6D" />} text={t("contacts.paymentMethods")} />
+            <InfoLine icon={<PackageCheck size={14} color="#22c55e" />} text={t("contacts.trackingDeposits")} />
           </div>
         </motion.div>
 
