@@ -10,7 +10,7 @@ import { useI18n } from "../../i18n";
 import { useBodyScrollLock } from "../../components/useBodyScrollLock";
 
 type EditableProduct = Omit<Product, "id" | "rating" | "reviews"> & { id: string };
-const allowedMediaMimes = new Set(["image/jpeg", "image/png", "image/webp", "video/mp4", "video/webm"]);
+const allowedMediaMimes = new Set(["image/jpeg", "image/png", "image/webp", "video/mp4", "video/webm", "video/quicktime"]);
 const maxImageBytes = 10 * 1024 * 1024;
 const maxVideoBytes = 100 * 1024 * 1024;
 
@@ -595,7 +595,7 @@ export function AdminProducts() {
                     <input
                       ref={mediaInputRef}
                       type="file"
-                      accept="image/png,image/jpeg,image/webp,video/mp4,video/webm"
+                      accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,video/quicktime,.mov"
                       className="sr-only"
                       disabled={uploadingMedia}
                       onChange={(event) => {
@@ -796,5 +796,8 @@ function getEditableMedia(product: Product): ProductMedia[] {
 }
 
 function mimeFromVideoUrl(url: string) {
-  return url.toLowerCase().split("?")[0].endsWith(".webm") ? "video/webm" : "video/mp4";
+  const filename = url.toLowerCase().split("?")[0];
+  if (filename.endsWith(".webm")) return "video/webm";
+  if (filename.endsWith(".mov")) return "video/quicktime";
+  return "video/mp4";
 }

@@ -65,7 +65,7 @@ export async function buildApp() {
     maxAge: "30d",
     immutable: true,
     setHeaders: (response, filePath) => {
-      if (/\.(mp4|webm)$/i.test(filePath)) {
+      if (/\.(mp4|webm|mov)$/i.test(filePath)) {
         response.setHeader("Cache-Control", "public, max-age=2592000, immutable");
         response.setHeader("Accept-Ranges", "bytes");
       }

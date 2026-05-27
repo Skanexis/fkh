@@ -11,7 +11,7 @@ import { env } from "../../config/env.js";
 import { prisma } from "../../db/prisma.js";
 
 const allowedImageMimes = new Set(["image/jpeg", "image/png", "image/webp"]);
-const allowedVideoMimes = new Set(["video/mp4", "video/webm"]);
+const allowedVideoMimes = new Set(["video/mp4", "video/webm", "video/quicktime"]);
 const maxImageBytes = 10 * 1024 * 1024;
 const maxVideoBytes = 100 * 1024 * 1024;
 
@@ -105,6 +105,8 @@ function extensionFromMime(mime: string) {
       return ".mp4";
     case "video/webm":
       return ".webm";
+    case "video/quicktime":
+      return ".mov";
     default:
       return ".jpg";
   }

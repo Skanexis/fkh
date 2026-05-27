@@ -475,7 +475,7 @@ server {
     listen [::]:80;
     server_name the-fkh.eu;
 
-    client_max_body_size 25m;
+    client_max_body_size 110m;
 
     location /api/ {
         proxy_pass http://127.0.0.1:18481/api/;
