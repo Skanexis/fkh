@@ -13,6 +13,8 @@ type EditableProduct = Omit<Product, "id" | "rating" | "reviews"> & { id: string
 const allowedMediaMimes = new Set(["image/jpeg", "image/png", "image/webp", "video/mp4", "video/webm", "video/quicktime"]);
 const maxImageBytes = 10 * 1024 * 1024;
 const maxVideoBytes = 100 * 1024 * 1024;
+const maxProductImages = 5;
+const maxProductVideos = 8;
 
 export function AdminProducts() {
   const { t } = useI18n();
@@ -98,6 +100,15 @@ export function AdminProducts() {
       setError(t("admin.noCategories"));
       return;
     }
+    const orderedMedia = orderProductMedia(getEditableMedia(editingProduct).filter((item) => item.url));
+    if (orderedMedia.filter((item) => item.type === "image").length > maxProductImages) {
+      setMediaUploadError(t("admin.maxImages"));
+      return;
+    }
+    if (orderedMedia.filter((item) => item.type === "video").length > maxProductVideos) {
+      setMediaUploadError(t("admin.maxVideos"));
+      return;
+    }
 
     const payload = {
       name: editingProduct.name,
@@ -117,8 +128,7 @@ export function AdminProducts() {
         sortOrder: (index + 1) * 10,
         isActive: true,
       })),
-      media: getEditableMedia(editingProduct)
-        .filter((item) => item.url)
+      media: orderedMedia
         .map((item, index) => ({
           mediaId: item.mediaId,
           type: item.type,
@@ -187,6 +197,7 @@ export function AdminProducts() {
       setMediaUploadError(t(file.type.startsWith("video/") ? "admin.videoTooLarge" : "admin.imageTooLarge"));
       return;
     }
+    if (!canAddMedia(file.type.startsWith("video/") ? "video" : "image")) return;
     void handleMediaUpload(file);
   }
 
@@ -197,6 +208,7 @@ export function AdminProducts() {
 
   function handleAddMediaUrl() {
     if (!mediaUrl.trim() || !editingProduct) return;
+    if (!canAddMedia(mediaUrlType)) return;
     addMediaToDraft({
       type: mediaUrlType,
       url: mediaUrl.trim(),
@@ -208,7 +220,19 @@ export function AdminProducts() {
   }
 
   function addMediaToDraft(media: ProductMedia) {
-    setEditingProduct((current) => current ? { ...current, media: [...getEditableMedia(current), media] } : current);
+    setEditingProduct((current) => current ? { ...current, media: orderProductMedia([...getEditableMedia(current), media]) } : current);
+  }
+
+  function canAddMedia(type: ProductMedia["type"]) {
+    if (!editingProduct) return false;
+    const mediaCount = getEditableMedia(editingProduct).filter((item) => item.type === type).length;
+    const limit = type === "image" ? maxProductImages : maxProductVideos;
+    if (mediaCount >= limit) {
+      setMediaUploadError(t(type === "image" ? "admin.maxImages" : "admin.maxVideos"));
+      return false;
+    }
+    setMediaUploadError(null);
+    return true;
   }
 
   function removeMediaFromDraft(index: number) {
@@ -783,8 +807,8 @@ export function AdminProducts() {
 }
 
 function getEditableMedia(product: Product): ProductMedia[] {
-  if (product.media?.length) return product.media;
-  return product.images
+  if (product.media?.length) return orderProductMedia(product.media);
+  return orderProductMedia(product.images
     .filter(Boolean)
     .map((url, index) => ({
       type: "image",
@@ -792,7 +816,14 @@ function getEditableMedia(product: Product): ProductMedia[] {
       thumbnailUrl: url,
       alt: product.name,
       sortOrder: (index + 1) * 10,
-    }));
+    })));
+}
+
+function orderProductMedia(media: ProductMedia[]) {
+  return [...media].sort((left, right) => {
+    if (left.type !== right.type) return left.type === "image" ? -1 : 1;
+    return (left.sortOrder ?? 0) - (right.sortOrder ?? 0);
+  });
 }
 
 function mimeFromVideoUrl(url: string) {

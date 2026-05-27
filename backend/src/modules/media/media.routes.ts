@@ -6,7 +6,7 @@ import type { Readable } from "node:stream";
 import type { FastifyInstance } from "fastify";
 import { MediaType } from "@prisma/client";
 import { requireAdmin } from "../../common/auth.js";
-import { badRequest } from "../../common/http-error.js";
+import { badRequest, HttpError, internalServerError } from "../../common/http-error.js";
 import { env } from "../../config/env.js";
 import { prisma } from "../../db/prisma.js";
 
@@ -40,24 +40,31 @@ export async function registerMediaRoutes(app: FastifyInstance) {
     const id = crypto.randomUUID();
     const safeName = `${id}${ext}`;
     const uploadDir = path.resolve(process.cwd(), "uploads");
-    await mkdir(uploadDir, { recursive: true });
     const targetPath = path.join(uploadDir, safeName);
-    const sizeBytes = await saveFileStream(file.file, targetPath, maxBytes);
+    try {
+      await mkdir(uploadDir, { recursive: true });
+      const sizeBytes = await saveFileStream(file.file, targetPath, maxBytes);
 
-    const publicBase = (env.PUBLIC_CDN_URL || env.PUBLIC_API_URL).replace(/\/$/, "");
-    const url = `${publicBase}/uploads/${safeName}`;
-    const asset = await prisma.mediaAsset.create({
-      data: {
-        id,
-        type: mediaType,
-        url,
-        thumbnailUrl: mediaType === MediaType.image ? url : null,
-        mimeType: file.mimetype,
-        sizeBytes,
-      },
-    });
+      const publicBase = (env.PUBLIC_CDN_URL || env.PUBLIC_API_URL).replace(/\/$/, "");
+      const url = `${publicBase}/uploads/${safeName}`;
+      const asset = await prisma.mediaAsset.create({
+        data: {
+          id,
+          type: mediaType,
+          url,
+          thumbnailUrl: mediaType === MediaType.image ? url : null,
+          mimeType: file.mimetype,
+          sizeBytes,
+        },
+      });
 
-    return { data: serializeMediaAsset(asset) };
+      return { data: serializeMediaAsset(asset) };
+    } catch (error) {
+      await unlink(targetPath).catch(() => undefined);
+      if (error instanceof HttpError) throw error;
+      request.log.error({ err: error }, "Media upload failed");
+      throw internalServerError("Could not upload media. Please try again.", "MEDIA_UPLOAD_FAILED");
+    }
   });
 }
 

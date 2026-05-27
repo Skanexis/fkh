@@ -24,6 +24,9 @@ const db = prisma as typeof prisma & {
   };
 };
 
+const maxProductImages = 5;
+const maxProductVideos = 8;
+
 const pagingQuery = z.object({
   search: z.string().optional(),
   page: z.coerce.number().int().positive().default(1),
@@ -669,7 +672,7 @@ const contactPayload = z.object({
 
 const productInclude = {
   category: { select: { id: true, slug: true, name: true } },
-  media: { orderBy: { sortOrder: "asc" as const } },
+  media: { orderBy: [{ type: "asc" as const }, { sortOrder: "asc" as const }] },
   priceTiers: { orderBy: { sortOrder: "asc" as const } },
 };
 
@@ -947,22 +950,50 @@ async function upsertProduct(productId: string | null, payload: Partial<z.infer<
     }
 
     if (payload.media) {
-      await tx.productMedia.deleteMany({ where: { productId: product.id } });
+      const resolvedMedia = [];
       for (const [index, media] of payload.media.entries()) {
         const asset = media.mediaId ? await tx.mediaAsset.findUnique({ where: { id: media.mediaId } }) : null;
+        if (media.mediaId && !asset) {
+          throw badRequest("An uploaded media file no longer exists. Upload it again.");
+        }
+        const type = asset?.type ?? media.type ?? MediaType.image;
+        const url = asset?.url ?? media.url;
+        if (!url) {
+          throw badRequest("Each product media item must include an uploaded file or URL.");
+        }
+        resolvedMedia.push({ media, asset, type, url, originalIndex: index });
+      }
+
+      const imageCount = resolvedMedia.filter((item) => item.type === MediaType.image).length;
+      const videoCount = resolvedMedia.filter((item) => item.type === MediaType.video).length;
+      if (imageCount > maxProductImages) {
+        throw badRequest(`A product can have at most ${maxProductImages} images.`);
+      }
+      if (videoCount > maxProductVideos) {
+        throw badRequest(`A product can have at most ${maxProductVideos} videos.`);
+      }
+
+      const orderedMedia = resolvedMedia.sort((left, right) => {
+        if (left.type !== right.type) return left.type === MediaType.image ? -1 : 1;
+        return left.originalIndex - right.originalIndex;
+      });
+
+      await tx.productMedia.deleteMany({ where: { productId: product.id } });
+      for (const [index, item] of orderedMedia.entries()) {
+        const { asset, media, type, url } = item;
         await tx.productMedia.create({
           data: {
             productId: product.id,
             mediaAssetId: asset?.id,
-            type: asset?.type ?? media.type ?? MediaType.image,
-            url: asset?.url ?? media.url!,
+            type,
+            url,
             thumbnailUrl: asset?.thumbnailUrl ?? media.thumbnailUrl,
             mimeType: asset?.mimeType ?? media.mimeType ?? "image/jpeg",
             sizeBytes: asset?.sizeBytes ?? media.sizeBytes ?? 0,
             width: asset?.width,
             height: asset?.height,
             durationSeconds: asset?.durationSeconds,
-            sortOrder: media.sortOrder ?? (index + 1) * 10,
+            sortOrder: (index + 1) * 10,
             alt: media.alt ?? product.name,
           },
         });

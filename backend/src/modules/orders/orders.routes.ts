@@ -87,7 +87,7 @@ export async function registerOrderRoutes(app: FastifyInstance) {
       include: {
         product: {
           include: {
-            media: { orderBy: { sortOrder: "asc" }, take: 1 },
+            media: { orderBy: [{ type: "asc" }, { sortOrder: "asc" }], take: 1 },
           },
         },
       },

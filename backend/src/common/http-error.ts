@@ -17,6 +17,10 @@ export function badRequest(message = "Bad request", details?: unknown) {
   return new HttpError(400, "BAD_REQUEST", message, details);
 }
 
+export function internalServerError(message = "Internal server error", code = "INTERNAL_SERVER_ERROR") {
+  return new HttpError(500, code, message);
+}
+
 export function unauthorized(message = "Unauthorized") {
   return new HttpError(401, "UNAUTHORIZED", message);
 }

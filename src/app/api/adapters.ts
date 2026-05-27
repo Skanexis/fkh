@@ -20,7 +20,11 @@ export function toProduct(apiProduct: ApiProduct): Product {
       thumbnailUrl: item.thumbnailUrl ?? null,
       alt: item.alt ?? null,
       sortOrder: item.sortOrder,
-    }));
+    }))
+    .sort((left, right) => {
+      if (left.type !== right.type) return left.type === "image" ? -1 : 1;
+      return left.sortOrder - right.sortOrder;
+    });
   const imagePreviews = media
     .filter((item) => item.type === "image" || item.thumbnailUrl)
     .map((item) => item.thumbnailUrl || item.url)
