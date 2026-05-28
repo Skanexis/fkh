@@ -5,6 +5,7 @@ import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import Fastify from "fastify";
 import path from "node:path";
+import { Prisma } from "@prisma/client";
 import { env, corsOrigins } from "./config/env.js";
 import { HttpError } from "./common/http-error.js";
 import { prisma } from "./db/prisma.js";
@@ -18,6 +19,8 @@ import { registerMediaRoutes } from "./modules/media/media.routes.js";
 import { registerPaymentRoutes } from "./modules/payments/payments.routes.js";
 import { startCryptoPaymentWatcher } from "./modules/payments/crypto-payments.service.js";
 import { registerAddressRoutes } from "./modules/addresses/addresses.routes.js";
+
+const devLocalHosts = new Set(["localhost", "127.0.0.1", "::1"]);
 
 export async function buildApp() {
   const app = Fastify({
@@ -48,7 +51,16 @@ export async function buildApp() {
         callback(null, true);
         return;
       }
-      callback(new Error("Origin not allowed"), false);
+
+      if (env.NODE_ENV !== "production") {
+        const host = parseOriginHost(origin);
+        if (host && isDevHostAllowed(host)) {
+          callback(null, true);
+          return;
+        }
+      }
+
+      callback(new HttpError(403, "CORS_ORIGIN_FORBIDDEN", "Origin is not allowed by CORS"), false);
     },
     credentials: true,
   });
@@ -106,6 +118,41 @@ export async function buildApp() {
       return;
     }
 
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2002") {
+        reply.status(409).send({
+          error: {
+            code: "UNIQUE_CONSTRAINT_VIOLATION",
+            message: "Record with the same unique field already exists",
+            details: error.meta,
+          },
+        });
+        return;
+      }
+
+      if (error.code === "P2003") {
+        reply.status(400).send({
+          error: {
+            code: "FOREIGN_KEY_VIOLATION",
+            message: "Referenced record does not exist or cannot be linked",
+            details: error.meta,
+          },
+        });
+        return;
+      }
+
+      if (error.code === "P2025") {
+        reply.status(404).send({
+          error: {
+            code: "RECORD_NOT_FOUND",
+            message: "Record was not found",
+            details: error.meta,
+          },
+        });
+        return;
+      }
+    }
+
     app.log.error(error);
     reply.status(500).send({
       error: {
@@ -132,4 +179,22 @@ export async function buildApp() {
   startCryptoPaymentWatcher(app);
 
   return app;
+}
+
+function parseOriginHost(origin: string) {
+  try {
+    return new URL(origin).hostname;
+  } catch {
+    return null;
+  }
+}
+
+function isDevHostAllowed(host: string) {
+  if (devLocalHosts.has(host)) return true;
+  if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) return true;
+  if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(host)) return true;
+  const match = /^172\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(host);
+  if (!match) return false;
+  const secondOctet = Number(match[1]);
+  return secondOctet >= 16 && secondOctet <= 31;
 }
