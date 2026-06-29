@@ -10,6 +10,8 @@ import { apiRequest } from "../api/client";
 import { ApiAddressSuggestion, ApiCryptoPaymentMethod, ApiOrder, ApiShippingMethod } from "../api/types";
 import { useI18n } from "../i18n";
 import { ProductImagePlaceholder } from "../components/ProductImagePlaceholder";
+import { ProductMediaPreview } from "../components/ProductMediaPreview";
+import { ProductMedia } from "../data/products";
 
 interface ShippingForm {
   fullName: string;
@@ -1272,20 +1274,39 @@ function PaymentMethodCard({
 
 function CartItemThumbnail({ item }: { item: CartItem }) {
   const [failed, setFailed] = useState(false);
-  const imageUrl = item.product.images.find(Boolean);
+  const media = getCartPreviewMedia(item);
 
-  if (!imageUrl || failed) {
+  if (!media || failed) {
     return <ProductImagePlaceholder iconSize={24} />;
   }
 
   return (
-    <img
-      src={imageUrl}
-      alt={item.product.name}
-      className="w-full h-full object-cover"
-      onError={() => setFailed(true)}
+    <ProductMediaPreview
+      media={media}
+      title={item.product.name}
+      className="h-full w-full object-cover"
+      iconSize={18}
+      showTypeBadge={false}
+      onImageError={() => {
+        if (media.type === "image") setFailed(true);
+      }}
     />
   );
+}
+
+function getCartPreviewMedia(item: CartItem): ProductMedia | null {
+  const media = item.product.media?.find((entry) => entry.url);
+  if (media) return media;
+
+  const imageUrl = item.product.images.find(Boolean);
+  return imageUrl
+    ? {
+        type: "image",
+        url: imageUrl,
+        thumbnailUrl: imageUrl,
+        alt: item.product.name,
+      }
+    : null;
 }
 
 function validateShippingForm(

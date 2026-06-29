@@ -22,7 +22,6 @@ export function toProduct(apiProduct: ApiProduct): Product {
       sortOrder: item.sortOrder,
     }))
     .sort((left, right) => {
-      if (left.type !== right.type) return left.type === "image" ? -1 : 1;
       return left.sortOrder - right.sortOrder;
     });
   const imagePreviews = media

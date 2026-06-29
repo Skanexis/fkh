@@ -212,7 +212,7 @@ export async function registerCatalogRoutes(app: FastifyInstance) {
 
 const productInclude = {
   category: { select: { id: true, slug: true, name: true } },
-  media: { orderBy: [{ type: "asc" as const }, { sortOrder: "asc" as const }] },
+  media: { orderBy: [{ sortOrder: "asc" as const }, { createdAt: "asc" as const }] },
   priceTiers: { where: { isActive: true }, orderBy: { sortOrder: "asc" as const } },
 };
 

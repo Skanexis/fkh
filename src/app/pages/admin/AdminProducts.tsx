@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Plus, Edit2, Trash2, X, Check, Search, Image, Upload, Video, Link2, Loader2 } from "lucide-react";
+import { Plus, Edit2, Trash2, X, Check, Search, Image, Upload, Link2, Loader2, FolderPlus, ArrowUp, ArrowDown } from "lucide-react";
 import { Product, ProductMedia } from "../../data/products";
 import { apiRequest, apiUploadFile } from "../../api/client";
 import { ApiCategory, ApiMediaAsset, ApiProduct } from "../../api/types";
 import { toProduct } from "../../api/adapters";
 import { useI18n } from "../../i18n";
 import { useBodyScrollLock } from "../../components/useBodyScrollLock";
+import { ProductMediaPreview } from "../../components/ProductMediaPreview";
 
 type EditableProduct = Omit<Product, "id" | "rating" | "reviews"> & { id: string };
 const allowedMediaMimes = new Set(["image/jpeg", "image/png", "image/webp", "video/mp4", "video/webm", "video/quicktime"]);
@@ -30,6 +31,9 @@ export function AdminProducts() {
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [mediaUploadProgress, setMediaUploadProgress] = useState(0);
   const [mediaUploadError, setMediaUploadError] = useState<string | null>(null);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [creatingCategory, setCreatingCategory] = useState(false);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
   const mediaInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -42,7 +46,7 @@ export function AdminProducts() {
     try {
       const [apiProducts, apiCategories] = await Promise.all([
         apiRequest<ApiProduct[]>("/api/v1/admin/products?limit=100"),
-        apiRequest<ApiCategory[]>("/api/v1/categories"),
+        apiRequest<ApiCategory[]>("/api/v1/admin/categories"),
       ]);
       setProducts(apiProducts.map(toProduct));
       setCategories(apiCategories);
@@ -64,6 +68,8 @@ export function AdminProducts() {
     setMediaUrlType("image");
     setMediaUploadError(null);
     setMediaUploadProgress(0);
+    setNewCategoryName("");
+    setCategoryError(null);
     setShowModal(true);
   }
 
@@ -72,7 +78,7 @@ export function AdminProducts() {
       id: `NEW-${Date.now()}`,
       name: "",
       brand: "F.K.H",
-      category: "Premium",
+      category: categories[0]?.name ?? "",
       description: "",
       longDescription: "",
       images: [],
@@ -85,6 +91,8 @@ export function AdminProducts() {
     setMediaUrlType("image");
     setMediaUploadError(null);
     setMediaUploadProgress(0);
+    setNewCategoryName("");
+    setCategoryError(null);
     setShowModal(true);
   }
 
@@ -95,8 +103,12 @@ export function AdminProducts() {
       return;
     }
     const exists = products.find((p) => p.id === editingProduct.id);
-    const category = categories.find((c) => c.name === editingProduct.category) ?? categories[0];
+    let category = categories.find((c) => c.name === editingProduct.category);
+    if (!category && newCategoryName.trim()) {
+      category = await createCategory(newCategoryName.trim()) ?? undefined;
+    }
     if (!category) {
+      setCategoryError(t("admin.noCategories"));
       setError(t("admin.noCategories"));
       return;
     }
@@ -158,6 +170,39 @@ export function AdminProducts() {
     }
     setShowModal(false);
     setEditingProduct(null);
+  }
+
+  async function createCategory(name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setCategoryError(t("admin.categoryNameRequired"));
+      return null;
+    }
+
+    setCreatingCategory(true);
+    setCategoryError(null);
+    try {
+      const category = await apiRequest<ApiCategory>("/api/v1/admin/categories", {
+        method: "POST",
+        body: JSON.stringify({ name: trimmed }),
+      });
+      setCategories((current) => mergeCategories(current, category));
+      setEditingProduct((current) => current ? { ...current, category: category.name } : current);
+      setNewCategoryName("");
+      setError(null);
+      return category;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("admin.createCategoryError");
+      setCategoryError(message);
+      setError(message);
+      return null;
+    } finally {
+      setCreatingCategory(false);
+    }
+  }
+
+  function handleCreateCategory() {
+    void createCategory(newCategoryName);
   }
 
   async function handleMediaUpload(file: File) {
@@ -236,7 +281,20 @@ export function AdminProducts() {
   }
 
   function removeMediaFromDraft(index: number) {
-    setEditingProduct((current) => current ? { ...current, media: getEditableMedia(current).filter((_, itemIndex) => itemIndex !== index) } : current);
+    setEditingProduct((current) => current ? { ...current, media: renumberMedia(getEditableMedia(current).filter((_, itemIndex) => itemIndex !== index)) } : current);
+  }
+
+  function moveMediaInDraft(index: number, direction: -1 | 1) {
+    setEditingProduct((current) => {
+      if (!current) return current;
+      const media = getEditableMedia(current);
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= media.length) return current;
+
+      const next = [...media];
+      [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+      return { ...current, media: renumberMedia(next) };
+    });
   }
 
   async function handleDelete(id: string) {
@@ -330,23 +388,7 @@ export function AdminProducts() {
                 className="rounded-lg overflow-hidden flex-shrink-0"
                 style={{ width: 40, height: 40 }}
               >
-                {product.images[0] ? (
-                  <img src={product.images[0]} alt={product.name} className="w-full h-full object-cover" />
-                ) : getEditableMedia(product)[0]?.type === "video" ? (
-                  <div
-                    className="w-full h-full flex items-center justify-center"
-                    style={{ background: "rgba(255,77,109,0.12)" }}
-                  >
-                    <Video size={16} color="#FF4D6D" />
-                  </div>
-                ) : (
-                  <div
-                    className="w-full h-full flex items-center justify-center"
-                    style={{ background: "rgba(59,130,246,0.1)" }}
-                  >
-                    <Image size={16} color="#3B82F6" />
-                  </div>
-                )}
+                <AdminProductMediaPreview product={product} />
               </div>
               <div className="min-w-0">
                 <p style={{ color: "#FFFFFF", fontSize: 13, fontWeight: 600, overflowWrap: "anywhere", lineHeight: 1.25 }}>
@@ -452,21 +494,87 @@ export function AdminProducts() {
                 {/* Category */}
                 <div>
                   <label style={{ color: "#9CA3AF", fontSize: 12, fontWeight: 600 }}>{t("admin.category")}</label>
-                  <select
-                    value={editingProduct.category}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, category: e.target.value })}
-                    className="w-full mt-1.5 px-3 py-2.5 rounded-xl outline-none"
+                  <div
+                    className="mt-1.5 rounded-xl p-3"
                     style={{
-                      background: "#1F2937",
+                      background: "rgba(59,130,246,0.06)",
                       border: "1px solid rgba(255,255,255,0.08)",
-                      color: "#FFFFFF",
-                      fontSize: 14,
                     }}
                   >
-                    {(categories.length ? categories.map((category) => category.name) : ["Premium", "Gold", "Limited", "New", "Classic"]).map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
+                    <select
+                      value={editingProduct.category}
+                      onChange={(e) => {
+                        setEditingProduct({ ...editingProduct, category: e.target.value });
+                        setCategoryError(null);
+                      }}
+                      className="w-full px-3 py-2.5 rounded-xl outline-none"
+                      style={{
+                        background: "#1F2937",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        color: "#FFFFFF",
+                        fontSize: 14,
+                      }}
+                    >
+                      {categories.length === 0 && <option value="">{t("admin.noCategories")}</option>}
+                      {categories.map((category) => (
+                        <option key={category.id} value={category.name}>{category.name}</option>
+                      ))}
+                    </select>
+
+                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+                      <div className="relative">
+                        <FolderPlus
+                          size={15}
+                          color="#60A5FA"
+                          className="absolute left-3 top-1/2 -translate-y-1/2"
+                        />
+                        <input
+                          value={newCategoryName}
+                          onChange={(e) => {
+                            setNewCategoryName(e.target.value);
+                            setCategoryError(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleCreateCategory();
+                            }
+                          }}
+                          placeholder={t("admin.categoryNamePlaceholder")}
+                          className="w-full rounded-xl py-2.5 pl-9 pr-3 outline-none"
+                          style={{
+                            background: "rgba(255,255,255,0.06)",
+                            border: "1px solid rgba(255,255,255,0.08)",
+                            color: "#FFFFFF",
+                            fontSize: 13,
+                          }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleCreateCategory}
+                        disabled={creatingCategory}
+                        className="rounded-xl px-3 py-2.5 flex items-center justify-center gap-2"
+                        style={{
+                          background: "rgba(59,130,246,0.16)",
+                          border: "1px solid rgba(59,130,246,0.28)",
+                          color: "#60A5FA",
+                          fontWeight: 800,
+                          fontSize: 13,
+                          minHeight: 42,
+                          opacity: creatingCategory ? 0.72 : 1,
+                        }}
+                      >
+                        {creatingCategory ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
+                        {creatingCategory ? t("admin.creatingCategory") : t("admin.createCategory")}
+                      </button>
+                    </div>
+                    {categoryError && (
+                      <p style={{ color: "#ef4444", fontSize: 12, lineHeight: 1.45, marginTop: 8 }}>
+                        {categoryError}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 {/* Description */}
@@ -686,18 +794,55 @@ export function AdminProducts() {
                               }}
                             >
                               {media.type === "image" ? (
-                                <img src={media.thumbnailUrl || media.url} alt={media.alt ?? editingProduct.name} className="w-full h-full object-cover" />
+                                <ProductMediaPreview
+                                  media={media}
+                                  title={editingProduct.name}
+                                  className="h-full w-full object-cover"
+                                  iconSize={18}
+                                  showTypeBadge={false}
+                                />
                               ) : (
-                                <Video size={20} color="#FF4D6D" />
+                                <ProductMediaPreview
+                                  media={media}
+                                  title={editingProduct.name}
+                                  className="h-full w-full"
+                                  iconSize={18}
+                                  showTypeBadge={false}
+                                />
                               )}
                             </div>
                             <div className="min-w-0 flex-1">
                               <p style={{ color: "#FFFFFF", fontSize: 12, fontWeight: 700 }}>
-                                {media.type === "video" ? t("admin.video") : t("admin.image")}
+                                {String(index + 1).padStart(2, "0")} · {media.type === "video" ? t("admin.video") : t("admin.image")}
                               </p>
                               <p style={{ color: "#6B7280", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                 {media.url}
                               </p>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <button
+                                type="button"
+                                aria-label={t("admin.moveMediaUp")}
+                                disabled={index === 0}
+                                onClick={() => moveMediaInDraft(index, -1)}
+                                className="p-1.5 rounded-lg"
+                                style={{ background: "rgba(255,255,255,0.06)", opacity: index === 0 ? 0.35 : 1 }}
+                              >
+                                <ArrowUp size={13} color="#9CA3AF" />
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={t("admin.moveMediaDown")}
+                                disabled={index === getEditableMedia(editingProduct).length - 1}
+                                onClick={() => moveMediaInDraft(index, 1)}
+                                className="p-1.5 rounded-lg"
+                                style={{
+                                  background: "rgba(255,255,255,0.06)",
+                                  opacity: index === getEditableMedia(editingProduct).length - 1 ? 0.35 : 1,
+                                }}
+                              >
+                                <ArrowDown size={13} color="#9CA3AF" />
+                              </button>
                             </div>
                             <button
                               type="button"
@@ -734,14 +879,14 @@ export function AdminProducts() {
                 </button>
                 <button
                   onClick={handleSave}
-                  disabled={uploadingMedia}
+                  disabled={uploadingMedia || creatingCategory}
                   className="flex-1 py-3 rounded-xl flex items-center justify-center gap-2"
                   style={{
                     background: "linear-gradient(135deg, #3B82F6, #60A5FA)",
                     color: "#FFFFFF",
                     fontWeight: 700,
                     fontSize: 14,
-                    opacity: uploadingMedia ? 0.65 : 1,
+                    opacity: uploadingMedia || creatingCategory ? 0.65 : 1,
                   }}
                 >
                   <Check size={16} strokeWidth={2.5} />
@@ -806,6 +951,31 @@ export function AdminProducts() {
   );
 }
 
+function AdminProductMediaPreview({ product }: { product: Product }) {
+  const media = getEditableMedia(product)[0];
+
+  if (media?.url) {
+    return (
+      <ProductMediaPreview
+        media={media}
+        title={product.name}
+        className="h-full w-full object-cover"
+        iconSize={14}
+        showTypeBadge={false}
+      />
+    );
+  }
+
+  return (
+    <div
+      className="w-full h-full flex items-center justify-center"
+      style={{ background: "rgba(59,130,246,0.1)" }}
+    >
+      <Image size={16} color="#3B82F6" />
+    </div>
+  );
+}
+
 function getEditableMedia(product: Product): ProductMedia[] {
   if (product.media?.length) return orderProductMedia(product.media);
   return orderProductMedia(product.images
@@ -820,9 +990,24 @@ function getEditableMedia(product: Product): ProductMedia[] {
 }
 
 function orderProductMedia(media: ProductMedia[]) {
-  return [...media].sort((left, right) => {
-    if (left.type !== right.type) return left.type === "image" ? -1 : 1;
-    return (left.sortOrder ?? 0) - (right.sortOrder ?? 0);
+  return media
+    .map((item, index) => ({ item, index }))
+    .sort((left, right) =>
+      ((left.item.sortOrder ?? (left.index + 1) * 10) - (right.item.sortOrder ?? (right.index + 1) * 10)) ||
+      (left.index - right.index),
+    )
+    .map(({ item }) => item);
+}
+
+function renumberMedia(media: ProductMedia[]) {
+  return media.map((item, index) => ({ ...item, sortOrder: (index + 1) * 10 }));
+}
+
+function mergeCategories(current: ApiCategory[], category: ApiCategory) {
+  const withoutDuplicate = current.filter((item) => item.id !== category.id);
+  return [...withoutDuplicate, category].sort((left, right) => {
+    const sortDiff = (left.sortOrder ?? 0) - (right.sortOrder ?? 0);
+    return sortDiff || left.name.localeCompare(right.name);
   });
 }
 

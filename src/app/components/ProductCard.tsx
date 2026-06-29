@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
-import { ShoppingCart, Star, ChevronLeft, ChevronRight, PlayCircle, Video } from "lucide-react";
-import { Product } from "../data/products";
+import { ShoppingCart, Star, ChevronLeft, ChevronRight } from "lucide-react";
+import { Product, ProductMedia } from "../data/products";
 import { useCart } from "../store/cart-context";
 import { useI18n } from "../i18n";
 import { ProductImagePlaceholder } from "./ProductImagePlaceholder";
+import { ProductMediaPreview } from "./ProductMediaPreview";
 
 interface ProductCardProps {
   product: Product;
@@ -22,9 +23,8 @@ export function ProductCard({ product, variant = "standard" }: ProductCardProps)
   const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
 
   const selectedTier = product.priceTiers[selectedTierIdx];
-  const imageGallery = product.images.filter((url) => Boolean(url) && !failedImages.has(url));
-  const activeImageUrl = imageGallery[Math.min(imgIdx, Math.max(imageGallery.length - 1, 0))] ?? "";
-  const hasVideo = product.media?.some((item) => item.type === "video" && item.url) ?? false;
+  const mediaGallery = getCardMedia(product, failedImages);
+  const activeMedia = mediaGallery[Math.min(imgIdx, Math.max(mediaGallery.length - 1, 0))];
 
   function handleAdd(e: React.MouseEvent) {
     e.stopPropagation();
@@ -35,12 +35,12 @@ export function ProductCard({ product, variant = "standard" }: ProductCardProps)
 
   function handlePrevImg(e: React.MouseEvent) {
     e.stopPropagation();
-    setImgIdx((i) => (i === 0 ? imageGallery.length - 1 : i - 1));
+    setImgIdx((i) => (i === 0 ? mediaGallery.length - 1 : i - 1));
   }
 
   function handleNextImg(e: React.MouseEvent) {
     e.stopPropagation();
-    setImgIdx((i) => (i === imageGallery.length - 1 ? 0 : i + 1));
+    setImgIdx((i) => (i === mediaGallery.length - 1 ? 0 : i + 1));
   }
 
   const BADGE_COLORS: Record<string, string> = {
@@ -65,25 +65,28 @@ export function ProductCard({ product, variant = "standard" }: ProductCardProps)
       <div className="fkh-card-signal" />
       {/* Image Gallery */}
       <div className="relative overflow-hidden" style={{ aspectRatio: "1/1" }}>
-        {imageGallery.length > 0 ? (
+        {activeMedia ? (
           <AnimatePresence mode="wait">
-            <motion.img
-              key={imgIdx}
-              src={activeImageUrl}
-              alt={product.name}
-              className="fkh-product-image w-full h-full object-cover"
+            <motion.div
+              key={`${activeMedia.type}-${activeMedia.url}-${imgIdx}`}
+              className="absolute inset-0"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.25 }}
-              onError={(event) => {
-                setFailedImages((current) => new Set(current).add(activeImageUrl));
-                setImgIdx(0);
-              }}
-            />
+            >
+              <ProductMediaPreview
+                media={activeMedia}
+                title={product.name}
+                className="fkh-product-image h-full w-full object-cover"
+                iconSize={variant === "feature" ? 34 : 28}
+                onImageError={(url) => {
+                  setFailedImages((current) => new Set(current).add(url));
+                  setImgIdx(0);
+                }}
+              />
+            </motion.div>
           </AnimatePresence>
-        ) : hasVideo ? (
-          <ProductVideoPlaceholder />
         ) : (
           <ProductImagePlaceholder className="absolute inset-0" iconSize={34} />
         )}
@@ -95,7 +98,7 @@ export function ProductCard({ product, variant = "standard" }: ProductCardProps)
         />
 
         {/* Gallery nav */}
-        {imageGallery.length > 1 && (
+        {mediaGallery.length > 1 && (
           <>
             <button
               onClick={handlePrevImg}
@@ -112,14 +115,14 @@ export function ProductCard({ product, variant = "standard" }: ProductCardProps)
               <ChevronRight size={14} color="#FFFFFF" />
             </button>
             <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 flex gap-1">
-              {imageGallery.map((_, i) => (
+              {mediaGallery.map((item, i) => (
                 <div
                   key={i}
                   style={{
                     width: i === imgIdx ? 12 : 4,
                     height: 4,
                     borderRadius: 2,
-                    background: i === imgIdx ? "#FF4D6D" : "rgba(255,255,255,0.4)",
+                    background: i === imgIdx ? "#FF4D6D" : item.type === "video" ? "rgba(255,77,109,0.45)" : "rgba(255,255,255,0.4)",
                     transition: "all 0.2s",
                   }}
                 />
@@ -218,40 +221,21 @@ export function ProductCard({ product, variant = "standard" }: ProductCardProps)
   );
 }
 
-function ProductVideoPlaceholder() {
-  return (
-    <div
-      className="absolute inset-0 flex items-center justify-center"
-      style={{
-        background:
-          "radial-gradient(circle at 50% 35%, rgba(255,77,109,0.2), transparent 36%), linear-gradient(135deg, rgba(14,14,17,1), rgba(31,20,25,1))",
-      }}
-    >
-      <div
-        className="flex items-center justify-center rounded-full"
-        style={{
-          width: 66,
-          height: 66,
-          background: "rgba(255,77,109,0.14)",
-          border: "1px solid rgba(255,77,109,0.46)",
-          boxShadow: "0 10px 30px rgba(255,77,109,0.2)",
-        }}
-      >
-        <PlayCircle size={36} color="#FF4D6D" strokeWidth={1.8} />
-      </div>
-      <div
-        className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full px-2.5 py-1"
-        style={{
-          background: "rgba(11,11,12,0.74)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          color: "#FFFFFF",
-          fontSize: 10,
-          fontWeight: 700,
-        }}
-      >
-        <Video size={12} color="#FF4D6D" />
-        VIDEO
-      </div>
-    </div>
-  );
+function getCardMedia(product: Product, failedImages: Set<string>): ProductMedia[] {
+  const media = (product.media ?? [])
+    .filter((item) => item.url)
+    .filter((item) => item.type !== "image" || !failedImages.has(item.url));
+
+  if (media.length) return media;
+
+  return product.images
+    .filter((url) => Boolean(url) && !failedImages.has(url))
+    .map((url, index) => ({
+      id: `${product.id}-image-${index}`,
+      type: "image",
+      url,
+      thumbnailUrl: url,
+      alt: product.name,
+      sortOrder: (index + 1) * 10,
+    }));
 }

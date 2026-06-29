@@ -3,6 +3,7 @@ export interface ApiCategory {
   slug: string;
   name: string;
   sortOrder: number;
+  isActive?: boolean;
 }
 
 export interface ApiProductMedia {

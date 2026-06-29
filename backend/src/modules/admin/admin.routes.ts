@@ -72,6 +72,13 @@ const productPayload = z.object({
     .default([]),
 });
 
+const categoryPayload = z.object({
+  name: z.string().trim().min(2).max(80),
+  slug: z.string().trim().min(2).max(100).optional(),
+  sortOrder: z.number().int().optional(),
+  isActive: z.boolean().default(true),
+});
+
 const orderQuery = pagingQuery.extend({
   status: z.nativeEnum(OrderStatus).optional(),
   dateFrom: z.coerce.date().optional(),
@@ -196,6 +203,54 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     ]);
 
     return { data: products.map((product) => serializeProduct(product)), meta: pageMeta(query.data.page, query.data.limit, total) };
+  });
+
+  app.get("/api/v1/admin/categories", async (request) => {
+    await requireAdmin(request);
+    const categories = await prisma.category.findMany({
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: categorySelect,
+    });
+    return { data: categories };
+  });
+
+  app.post("/api/v1/admin/categories", async (request) => {
+    const admin = await requireAdmin(request);
+    const body = categoryPayload.safeParse(request.body);
+    if (!body.success) throw badRequest("Invalid category payload", body.error.flatten());
+
+    const existing = await prisma.category.findFirst({
+      where: { name: { equals: body.data.name, mode: "insensitive" } },
+      select: categorySelect,
+    });
+
+    if (existing) {
+      const category = existing.isActive === body.data.isActive && body.data.sortOrder === undefined
+        ? existing
+        : await prisma.category.update({
+            where: { id: existing.id },
+            data: {
+              isActive: body.data.isActive,
+              ...(body.data.sortOrder !== undefined ? { sortOrder: body.data.sortOrder } : {}),
+            },
+            select: categorySelect,
+          });
+      await audit(request, admin.id, "category.reuse", "Category", category.id, existing, category);
+      return { data: category };
+    }
+
+    const maxSortOrder = await prisma.category.aggregate({ _max: { sortOrder: true } });
+    const category = await prisma.category.create({
+      data: {
+        name: body.data.name,
+        slug: await uniqueCategorySlug(body.data.slug ?? body.data.name),
+        sortOrder: body.data.sortOrder ?? ((maxSortOrder._max.sortOrder ?? 0) + 10),
+        isActive: body.data.isActive,
+      },
+      select: categorySelect,
+    });
+    await audit(request, admin.id, "category.create", "Category", category.id, null, category);
+    return { data: category };
   });
 
   app.post("/api/v1/admin/products", async (request) => {
@@ -670,9 +725,17 @@ const contactPayload = z.object({
   sortOrder: z.number().int().default(0),
 });
 
+const categorySelect = {
+  id: true,
+  slug: true,
+  name: true,
+  sortOrder: true,
+  isActive: true,
+};
+
 const productInclude = {
   category: { select: { id: true, slug: true, name: true } },
-  media: { orderBy: [{ type: "asc" as const }, { sortOrder: "asc" as const }] },
+  media: { orderBy: [{ sortOrder: "asc" as const }, { createdAt: "asc" as const }] },
   priceTiers: { orderBy: { sortOrder: "asc" as const } },
 };
 
@@ -973,10 +1036,9 @@ async function upsertProduct(productId: string | null, payload: Partial<z.infer<
         throw badRequest(`A product can have at most ${maxProductVideos} videos.`);
       }
 
-      const orderedMedia = resolvedMedia.sort((left, right) => {
-        if (left.type !== right.type) return left.type === MediaType.image ? -1 : 1;
-        return left.originalIndex - right.originalIndex;
-      });
+      const orderedMedia = resolvedMedia.sort((left, right) =>
+        ((left.media.sortOrder ?? 0) - (right.media.sortOrder ?? 0)) || (left.originalIndex - right.originalIndex),
+      );
 
       await tx.productMedia.deleteMany({ where: { productId: product.id } });
       for (const [index, item] of orderedMedia.entries()) {
@@ -1031,6 +1093,19 @@ function slugify(value: string) {
     .replace(/['"]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+async function uniqueCategorySlug(value: string) {
+  const base = slugify(value) || "category";
+  let candidate = base;
+  let suffix = 2;
+
+  while (await prisma.category.findUnique({ where: { slug: candidate }, select: { id: true } })) {
+    candidate = `${base}-${suffix}`;
+    suffix += 1;
+  }
+
+  return candidate;
 }
 
 function formatTrackingTelegramMessage(input: {
